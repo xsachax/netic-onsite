@@ -3,7 +3,8 @@
 A production-minded Connect Four environment where a human plays against a
 hybrid LLM and alpha-beta search agent.
 
-**Live demo:** https://netic-onsite.vercel.app
+**Live demo:** https://netic-onsite.vercel.app  
+**Public evaluations:** https://netic-onsite.vercel.app/evals
 
 This is intentionally not an LLM wrapper. The model cannot edit the board. A
 deterministic engine owns all state transitions, the model operates through
@@ -139,6 +140,31 @@ Aggregate analytics are computed directly from normalized game and move events:
 games, outcomes, model/tool strategies, fallback rate, model latency, and token
 usage. The UI shows live totals without exposing individual users or prompts.
 
+## Evaluation platform
+
+The public **Evaluations** tab runs either provider against eight versioned board
+positions. Each case compares the selected column with one or more accepted
+golden moves and preserves the decision trace, explanation, latency, model, and
+token usage in PostgreSQL.
+
+The `pons-golden-v1` dataset samples opening, midgame, and endgame positions from
+Pascal Pons' public
+[GameSolver benchmarks](http://blog.gamesolver.org/solving-connect-four/02-test-protocol/).
+Per-column exact minimax scores were captured once from the public solver API and
+checked into the repository. The app derives every golden move by taking the
+maximum score among legal columns and validates the position and score vector at
+module load and in tests.
+
+This is intentionally offline and reproducible: production evaluation runs never
+depend on the external solver service and no AGPL solver code is included. The
+popular UCI Connect-4 dataset was not used because it labels position outcomes,
+not the best action for each legal move.
+
+Runs execute one scenario per request so progress is durable across serverless
+invocations. Duplicate case requests are idempotent, partial runs remain
+inspectable, and public creation is capped at 20 runs per hour to bound provider
+spend.
+
 ## API
 
 `POST /api/games` creates a durable game.
@@ -166,6 +192,16 @@ names. It never returns credentials.
 
 `GET /api/analytics` returns aggregate gameplay and agent-operational metrics.
 
+`GET /api/evals` returns the current versioned scenario set and recent durable
+runs.
+
+`POST /api/evals/runs` creates a provider/difficulty evaluation run.
+
+`GET /api/evals/runs/:runId` reloads its progress and case results.
+
+`POST /api/evals/runs/:runId/cases` executes and atomically records one selected
+scenario. Retrying an already-recorded case returns the existing run unchanged.
+
 The original stateless `POST /api/turn` remains as a local fallback when
 `DATABASE_URL` is not configured.
 
@@ -179,9 +215,9 @@ npm run lint
 npm run build
 ```
 
-The evaluation suite checks immediate wins, mandatory blocks, center preference,
-full-column avoidance, legality, and seeded matches against random and shallow
-heuristic baselines.
+The deterministic suite checks immediate wins, mandatory blocks, center
+preference, full-column avoidance, legality, seeded matches against random and
+shallow heuristic baselines, and all golden dataset invariants.
 
 Current deterministic baseline:
 
@@ -192,9 +228,10 @@ search vs heuristic: 20-0-0
 0 illegal moves
 ```
 
-The seeded suite is a regression gate, not a claim that Connect Four is solved.
-A production evaluation pipeline would add deeper-search regret, historical
-position replay, prompt/model version comparisons, latency, and cost budgets.
+The seeded suite is a regression gate, while the web platform measures real
+provider behavior against exact solved positions. A larger production suite
+would add game-theoretic regret, historical position replay, prompt/model version
+comparisons, and explicit cost budgets.
 
 ## Failure handling
 
@@ -218,11 +255,12 @@ src/
     orchestrator.ts     # guards, retries, fallback, trace
     search/             # alpha-beta search and evaluation
   app/
-    api/                # versioned game and analytics routes
+    api/                # versioned game, analytics, and evaluation routes
+    evals/              # public evaluation workspace
     page.tsx            # playable UI and trace inspector
-  db/                   # Neon schema, repository, CAS commits, analytics
+  db/                   # Neon schema, game/eval repositories, CAS commits
   domain/connect4/      # authoritative rules and state transitions
-  evals/                # seeded tactical and head-to-head evaluation
+  evals/                # golden dataset, evaluator, contracts, seeded CLI
   game/                 # history replay and shared API contracts
 ```
 

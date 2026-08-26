@@ -12,6 +12,11 @@ The strategy is **depth over feature count**. A small, coherent system with clea
 boundaries and evidence that it works is more defensible than many unfinished
 features.
 
+**Current status:** the core product, Vercel deployment, Neon persistence,
+optimistic concurrency, idempotency, aggregate analytics, and public golden-move
+evaluation workspace are shipped. The remaining roadmap describes the next
+scaling steps rather than incomplete MVP work.
+
 ## Product Slice for the On-Site
 
 ### Must ship
@@ -39,7 +44,7 @@ features.
 
 ### Deliberately defer
 
-- Authentication, multiplayer, and a production database.
+- Authentication and human-versus-human multiplayer.
 - Distributed queues, Redis, and Kubernetes.
 - Streaming token-by-token model output.
 - Elaborate animation or visual design.
@@ -247,9 +252,9 @@ Use this window only for blocking defects. Do not add new features.
 
 ## Scalability Roadmap
 
-### Stage 1 — Durable single-region service
+### Stage 1 — Durable single-region service (complete)
 
-- Replace the in-memory store with PostgreSQL.
+- Use managed PostgreSQL as the authoritative store.
 - Store game state, append-only moves, turn traces, and agent configuration
   version.
 - Use optimistic concurrency (`game_version`) so two requests cannot apply moves
@@ -292,6 +297,8 @@ retries safe.
 ### Stage 5 — Continuous evaluation
 
 - Keep deterministic tactical fixtures as a blocking CI gate.
+- Run versioned golden-move scenarios from solved public benchmark positions.
+- Persist provider, model, trace, latency, tokens, and pass/fail for every case.
 - Run seeded tournaments against random, heuristic, and previous production
   agents.
 - Replay anonymized production positions against candidate versions.
