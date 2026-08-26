@@ -61,8 +61,11 @@ CREATE TABLE IF NOT EXISTS eval_runs (
   id UUID PRIMARY KEY,
   dataset_version TEXT NOT NULL,
   policy_version TEXT NOT NULL,
+  benchmark_type TEXT NOT NULL DEFAULT 'agent'
+    CHECK (benchmark_type IN ('agent', 'search')),
+  search_depth SMALLINT CHECK (search_depth BETWEEN 1 AND 8),
   scenario_ids TEXT[] NOT NULL,
-  provider TEXT NOT NULL CHECK (provider IN ('openai', 'anthropic')),
+  provider TEXT CHECK (provider IN ('openai', 'anthropic')),
   status TEXT NOT NULL DEFAULT 'running'
     CHECK (status IN ('running', 'completed')),
   total_cases SMALLINT NOT NULL CHECK (total_cases > 0),
@@ -71,7 +74,11 @@ CREATE TABLE IF NOT EXISTS eval_runs (
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   completed_at TIMESTAMPTZ,
   CHECK (completed_cases BETWEEN 0 AND total_cases),
-  CHECK (passed_cases BETWEEN 0 AND completed_cases)
+  CHECK (passed_cases BETWEEN 0 AND completed_cases),
+  CONSTRAINT eval_runs_benchmark_config_check CHECK (
+    (benchmark_type = 'search' AND search_depth IS NOT NULL AND provider IS NULL)
+    OR (benchmark_type = 'agent' AND provider IS NOT NULL)
+  )
 );
 
 CREATE TABLE IF NOT EXISTS eval_results (
@@ -90,6 +97,8 @@ CREATE TABLE IF NOT EXISTS eval_results (
   provider TEXT,
   model TEXT,
   latency_ms DOUBLE PRECISION,
+  search_depth SMALLINT CHECK (search_depth BETWEEN 1 AND 8),
+  search_nodes INTEGER CHECK (search_nodes >= 0),
   total_tokens INTEGER,
   error TEXT,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
@@ -108,3 +117,18 @@ UPDATE eval_runs
 SET policy_version = 'legacy-unversioned'
 WHERE policy_version IS NULL;
 ALTER TABLE eval_runs ALTER COLUMN policy_version SET NOT NULL;
+ALTER TABLE eval_runs ADD COLUMN IF NOT EXISTS benchmark_type TEXT
+  NOT NULL DEFAULT 'agent';
+ALTER TABLE eval_runs ADD COLUMN IF NOT EXISTS search_depth SMALLINT;
+ALTER TABLE eval_runs ALTER COLUMN provider DROP NOT NULL;
+ALTER TABLE eval_runs DROP CONSTRAINT IF EXISTS eval_runs_benchmark_config_check;
+ALTER TABLE eval_runs ADD CONSTRAINT eval_runs_benchmark_config_check CHECK (
+  (
+    benchmark_type = 'search'
+    AND search_depth BETWEEN 1 AND 8
+    AND provider IS NULL
+  )
+  OR (benchmark_type = 'agent' AND provider IS NOT NULL)
+);
+ALTER TABLE eval_results ADD COLUMN IF NOT EXISTS search_depth SMALLINT;
+ALTER TABLE eval_results ADD COLUMN IF NOT EXISTS search_nodes INTEGER;

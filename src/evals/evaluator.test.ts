@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { evaluateSelectedMove, prepareEvalScenario } from "./evaluator";
+import {
+  evaluateSelectedMove,
+  executeSearchEvalScenario,
+  prepareEvalScenario,
+} from "./evaluator";
 import type { EvalScenario } from "./types";
 
 const source = {
@@ -37,6 +41,21 @@ describe("evaluation scenarios", () => {
     expect(evaluateSelectedMove(fixture, 2)).toBe(true);
     expect(evaluateSelectedMove(fixture, 3)).toBe(true);
     expect(evaluateSelectedMove(fixture, 4)).toBe(false);
+  });
+
+  it("benchmarks a fixed search depth without a model", () => {
+    const execution = executeSearchEvalScenario({
+      scenario: scenario(),
+      searchDepth: 3,
+    });
+
+    expect(execution).toMatchObject({
+      selectedMove: 3,
+      passed: true,
+      searchDepth: 3,
+    });
+    expect(execution.searchNodes).toBeGreaterThan(0);
+    expect(execution.searchDurationMs).toBeGreaterThanOrEqual(0);
   });
 
   it("rejects positions where the human is to move", () => {

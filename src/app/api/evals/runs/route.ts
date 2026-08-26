@@ -1,5 +1,4 @@
 import { NextResponse } from "next/server";
-import { AGENT_POLICY_VERSION } from "@/agent";
 import {
   createEvalRun,
   DatabaseUnavailableError,
@@ -9,6 +8,7 @@ import {
   createEvalRunRequestSchema,
   EVAL_DATASET_VERSION,
   EVAL_SCENARIOS,
+  SEARCH_BENCHMARK_POLICY_VERSION,
 } from "@/evals";
 
 export const runtime = "nodejs";
@@ -58,9 +58,9 @@ export async function POST(request: Request): Promise<NextResponse> {
   try {
     const run = await createEvalRun({
       datasetVersion: EVAL_DATASET_VERSION,
-      policyVersion: AGENT_POLICY_VERSION,
+      policyVersion: SEARCH_BENCHMARK_POLICY_VERSION,
+      searchDepth: parsed.data.searchDepth,
       scenarioIds: uniqueScenarioIds,
-      provider: parsed.data.provider,
     });
     return NextResponse.json({ run }, { status: 201 });
   } catch (error) {

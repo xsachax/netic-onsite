@@ -155,10 +155,11 @@ usage. The UI shows live totals without exposing individual users or prompts.
 
 ## Evaluation platform
 
-The public **Evaluations** tab runs either provider against 28 versioned board
-positions. Each case compares the selected column with one or more accepted
-golden moves and preserves the decision trace, explanation, latency, model, and
-token usage in PostgreSQL.
+The public **Evaluations** tab benchmarks fixed search depths 1 through 8 against
+28 versioned board positions. A slider controls the depth, and each case compares
+the selected column with one or more accepted golden moves while recording search
+latency and explored nodes in PostgreSQL. No model call is made, so the results
+isolate the precision-versus-compute tradeoff instead of provider latency.
 
 The `pons-golden-v2` dataset samples wins, mandatory blocks, tactics, strategy,
 and endgames from
@@ -177,9 +178,8 @@ not the best action for each legal move.
 Runs execute one scenario per request so progress is durable across serverless
 invocations. Duplicate case requests are idempotent, partial runs remain
 inspectable, and public creation is capped at 100 selected cases per hour to
-bound provider spend. Every run records
-`d6-selective-d7-margin12-v1` as its policy version; legacy runs remain
-inspectable but cannot resume under a different policy.
+bound compute. Every run records `fixed-depth-search-v1` plus its selected depth;
+legacy agent runs remain inspectable but cannot resume as search benchmarks.
 
 ### Automated data generation
 
@@ -239,7 +239,14 @@ names. It never returns credentials.
 `GET /api/evals` returns the current versioned scenario set and recent durable
 runs.
 
-`POST /api/evals/runs` creates an evaluation run for the selected provider.
+`POST /api/evals/runs` creates a fixed-depth search benchmark:
+
+```json
+{
+  "scenarioIds": ["opening-conversion", "central-winning-plan"],
+  "searchDepth": 6
+}
+```
 
 `GET /api/evals/runs/:runId` reloads its progress and case results.
 
@@ -274,10 +281,10 @@ search vs heuristic: 20-0-0
 0 illegal moves
 ```
 
-The seeded suite is a regression gate, while the web platform measures real
-provider behavior against exact solved positions. A larger production suite
-would add game-theoretic regret, historical position replay, prompt/model version
-comparisons, and explicit cost budgets.
+The seeded suite is a regression gate, while the web platform measures fixed-depth
+search accuracy, latency, and node count against exact solved positions. A larger
+production suite would add game-theoretic regret, historical position replay,
+holdout positions, and explicit compute budgets.
 
 ## Failure handling
 

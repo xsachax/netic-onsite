@@ -5,7 +5,7 @@ import type {
   AgentTrace,
 } from "@/agent";
 import { agentDecisionSchema } from "@/game/contracts";
-import type { EvalCaseExecution, EvalScenario } from "@/evals";
+import type { EvalScenario, SearchEvalCaseExecution } from "@/evals";
 import { getDatabase } from "./client";
 
 const MAX_PUBLIC_CASES_PER_HOUR = 100;
@@ -14,8 +14,10 @@ const evalRunRowSchema = z.object({
   id: z.string().uuid(),
   dataset_version: z.string(),
   policy_version: z.string(),
+  benchmark_type: z.enum(["agent", "search"]),
+  search_depth: z.coerce.number().int().min(1).max(8).nullable(),
   scenario_ids: z.array(z.string()),
-  provider: z.enum(["openai", "anthropic"]),
+  provider: z.enum(["openai", "anthropic"]).nullable(),
   status: z.enum(["running", "completed"]),
   total_cases: z.coerce.number().int(),
   completed_cases: z.coerce.number().int(),
@@ -39,6 +41,8 @@ const evalResultRowSchema = z.object({
   provider: z.string().nullable(),
   model: z.string().nullable(),
   latency_ms: z.coerce.number().nullable(),
+  search_depth: z.coerce.number().int().min(1).max(8).nullable(),
+  search_nodes: z.coerce.number().int().nonnegative().nullable(),
   total_tokens: z.coerce.number().int().nullable(),
   error: z.string().nullable(),
   created_at: z.coerce.date(),
@@ -63,6 +67,8 @@ export interface StoredEvalResult {
   readonly provider: string | null;
   readonly model: string | null;
   readonly latencyMs: number | null;
+  readonly searchDepth: number | null;
+  readonly searchNodes: number | null;
   readonly totalTokens: number | null;
   readonly error: string | null;
   readonly createdAt: string;
@@ -72,8 +78,10 @@ export interface StoredEvalRun {
   readonly id: string;
   readonly datasetVersion: string;
   readonly policyVersion: string;
+  readonly benchmarkType: "agent" | "search";
+  readonly searchDepth: number | null;
   readonly scenarioIds: readonly string[];
-  readonly provider: AgentProvider;
+  readonly provider: AgentProvider | null;
   readonly status: "running" | "completed";
   readonly totalCases: number;
   readonly completedCases: number;
@@ -110,8 +118,8 @@ export class EvalScenarioNotInRunError extends Error {
 export async function createEvalRun(options: {
   readonly datasetVersion: string;
   readonly policyVersion: string;
+  readonly searchDepth: number;
   readonly scenarioIds: readonly string[];
-  readonly provider: AgentProvider;
 }): Promise<StoredEvalRun> {
   const sql = getDatabase();
   const recentRows = await sql`
@@ -133,6 +141,8 @@ export async function createEvalRun(options: {
       id,
       dataset_version,
       policy_version,
+      benchmark_type,
+      search_depth,
       scenario_ids,
       provider,
       total_cases
@@ -141,8 +151,10 @@ export async function createEvalRun(options: {
       ${id},
       ${options.datasetVersion},
       ${options.policyVersion},
+      ${"search"},
+      ${options.searchDepth},
       ${options.scenarioIds},
-      ${options.provider},
+      ${null},
       ${options.scenarioIds.length}
     )
   `;
@@ -159,6 +171,8 @@ export async function getEvalRun(runId: string): Promise<StoredEvalRun> {
           id,
           dataset_version,
           policy_version,
+          benchmark_type,
+          search_depth,
           scenario_ids,
           provider,
           status,
@@ -186,6 +200,8 @@ export async function getEvalRun(runId: string): Promise<StoredEvalRun> {
           provider,
           model,
           latency_ms,
+          search_depth,
+          search_nodes,
           total_tokens,
           error,
           created_at
@@ -208,6 +224,8 @@ export async function getEvalRun(runId: string): Promise<StoredEvalRun> {
     id: run.id,
     datasetVersion: run.dataset_version,
     policyVersion: run.policy_version,
+    benchmarkType: run.benchmark_type,
+    searchDepth: run.search_depth,
     scenarioIds: run.scenario_ids,
     provider: run.provider,
     status: run.status,
@@ -241,16 +259,20 @@ export async function listEvalRuns(limit = 10): Promise<StoredEvalRun[]> {
 export async function recordEvalExecution(options: {
   readonly run: StoredEvalRun;
   readonly ordinal: number;
-  readonly execution: EvalCaseExecution;
+  readonly execution: SearchEvalCaseExecution;
 }): Promise<StoredEvalRun> {
   return recordEvalResult({
     run: options.run,
     ordinal: options.ordinal,
     scenario: options.execution.scenario,
-    selectedMove: options.execution.decision.column,
+    selectedMove: options.execution.selectedMove,
     passed: options.execution.passed,
-    trace: options.execution.decision.trace,
-    explanation: options.execution.decision.explanation,
+    trace: null,
+    explanation: null,
+    strategy: "search-benchmark",
+    latencyMs: options.execution.searchDurationMs,
+    searchDepth: options.execution.searchDepth,
+    searchNodes: options.execution.searchNodes,
     error: null,
   });
 }
@@ -269,6 +291,10 @@ export async function recordEvalFailure(options: {
     passed: false,
     trace: null,
     explanation: null,
+    strategy: null,
+    latencyMs: null,
+    searchDepth: options.run.searchDepth,
+    searchNodes: null,
     error: options.error,
   });
 }
@@ -281,6 +307,10 @@ async function recordEvalResult(options: {
   readonly passed: boolean;
   readonly trace: AgentTrace | null;
   readonly explanation: string | null;
+  readonly strategy: string | null;
+  readonly latencyMs: number | null;
+  readonly searchDepth: number | null;
+  readonly searchNodes: number | null;
   readonly error: string | null;
 }): Promise<StoredEvalRun> {
   if (!options.run.scenarioIds.includes(options.scenario.id)) {
@@ -310,6 +340,8 @@ async function recordEvalResult(options: {
         provider,
         model,
         latency_ms,
+        search_depth,
+        search_nodes,
         total_tokens,
         error
       )
@@ -323,12 +355,14 @@ async function recordEvalResult(options: {
         ${options.scenario.goldenMoves},
         ${options.selectedMove},
         ${options.passed},
-        ${options.trace?.strategy ?? null},
+        ${options.strategy},
         ${options.explanation},
         ${trace}::jsonb,
         ${options.trace?.provider ?? null},
         ${options.trace?.model ?? null},
-        ${options.trace?.latencyMs ?? null},
+        ${options.latencyMs},
+        ${options.searchDepth},
+        ${options.searchNodes},
         ${options.trace?.usage.totalTokens ?? null},
         ${options.error}
       )
@@ -378,6 +412,8 @@ function mapEvalResult(row: unknown): StoredEvalResult {
     provider: result.provider,
     model: result.model,
     latencyMs: result.latency_ms,
+    searchDepth: result.search_depth,
+    searchNodes: result.search_nodes,
     totalTokens: result.total_tokens,
     error: result.error,
     createdAt: result.created_at.toISOString(),

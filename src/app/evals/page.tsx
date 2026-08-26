@@ -15,7 +15,7 @@ export default function EvaluationsPage() {
   const [overview, setOverview] = useState<EvalOverviewContract | null>(null);
   const [activeRun, setActiveRun] = useState<EvalRunContract | null>(null);
   const [selectedIds, setSelectedIds] = useState<readonly string[]>([]);
-  const [provider, setProvider] = useState<"openai" | "anthropic">("openai");
+  const [searchDepth, setSearchDepth] = useState(6);
   const [runningScenarioId, setRunningScenarioId] = useState<string | null>(
     null,
   );
@@ -65,7 +65,7 @@ export default function EvaluationsPage() {
     try {
       let run = await createRun({
         scenarioIds: selectedIds,
-        provider,
+        searchDepth,
       });
       setActiveRun(run);
 
@@ -105,11 +105,12 @@ export default function EvaluationsPage() {
 
       <header className="eval-hero">
         <div>
-          <p className="eyebrow">Golden move benchmark</p>
-          <h1>Agent evaluations<span className="title-dot">.</span></h1>
+          <p className="eyebrow">Search-only golden benchmark</p>
+          <h1>Search evaluations<span className="title-dot">.</span></h1>
           <p className="subtitle">
-            Versioned scenarios, accepted optimal moves, and inspectable model
-            decisions.
+            Compare fixed-depth search accuracy, latency, and explored nodes
+            against exact solved positions. Gameplay keeps its adaptive
+            depth-6/selective-depth-7 policy.
           </p>
         </div>
         {overview && (
@@ -122,20 +123,24 @@ export default function EvaluationsPage() {
       </header>
 
       <section className="eval-toolbar">
-        <div className="eval-control">
-          <span>Provider</span>
-          <div className="segmented-control">
-            {(["openai", "anthropic"] as const).map((option) => (
-              <button
-                className={provider === option ? "selected" : ""}
-                disabled={isRunning}
-                key={option}
-                onClick={() => setProvider(option)}
-                type="button"
-              >
-                {option === "openai" ? "OpenAI" : "Anthropic"}
-              </button>
-            ))}
+        <div className="eval-control depth-control">
+          <div className="depth-label">
+            <span>Search depth</span>
+            <strong>{searchDepth}</strong>
+          </div>
+          <input
+            aria-label="Search depth"
+            disabled={isRunning}
+            max="8"
+            min="1"
+            onChange={(event) => setSearchDepth(Number(event.target.value))}
+            step="1"
+            type="range"
+            value={searchDepth}
+          />
+          <div className="depth-scale" aria-hidden="true">
+            <span>1 · faster</span>
+            <span>8 · deeper</span>
           </div>
         </div>
         <button
@@ -246,9 +251,14 @@ export default function EvaluationsPage() {
                 {Math.round(run.passRate * 100)}%
               </span>
               <div>
-                <strong>{run.provider}</strong>
+                <strong>
+                  {run.benchmarkType === "search"
+                   ? `Depth ${run.searchDepth}`
+                   : `${run.provider ?? "Legacy"} agent`}
+                </strong>
                 <small>
                   {run.passedCases}/{run.completedCases} passed ·{" "}
+                  {formatAverage(run.results.map((result) => result.latencyMs), " ms")} ·{" "}
                   {run.policyVersion} ·{" "}
                   {new Date(run.createdAt).toLocaleTimeString()}
                 </small>
@@ -268,6 +278,12 @@ export default function EvaluationsPage() {
 
 function RunSummary({ run }: { readonly run: EvalRunContract }) {
   const failed = run.completedCases - run.passedCases;
+  const averageLatency = averageNonNull(
+    run.results.map((result) => result.latencyMs),
+  );
+  const averageNodes = averageNonNull(
+    run.results.map((result) => result.searchNodes),
+  );
 
   return (
     <section className="run-summary">
@@ -284,12 +300,20 @@ function RunSummary({ run }: { readonly run: EvalRunContract }) {
         <strong className="fail-value">{failed}</strong>
       </div>
       <div>
-        <span>Progress</span>
-        <strong>{run.completedCases}/{run.totalCases}</strong>
+        <span>Avg. search</span>
+        <strong>{averageLatency?.toFixed(1) ?? "—"} ms</strong>
       </div>
       <div>
-        <span>Configuration</span>
-        <strong>{run.provider} · {run.policyVersion}</strong>
+        <span>Avg. nodes</span>
+        <strong>
+          {averageNodes === null
+            ? "—"
+            : Math.round(averageNodes).toLocaleString()}
+        </strong>
+      </div>
+      <div>
+        <span>Depth</span>
+        <strong>{run.searchDepth ?? "legacy"}</strong>
       </div>
     </section>
   );
@@ -361,11 +385,11 @@ function ScenarioCard({
 
       <div className="scenario-meta">
         <a href={scenario.source.url}>{scenario.source.name}</a>
-        {result?.trace && (
-          <>
-            <span>{Math.round(result.trace.latencyMs)} ms</span>
-            <span>{result.trace.strategy}</span>
-          </>
+        {result?.latencyMs !== null && result?.latencyMs !== undefined && (
+          <span>{result.latencyMs.toFixed(1)} ms</span>
+        )}
+        {result?.searchNodes !== null && result?.searchNodes !== undefined && (
+          <span>{result.searchNodes.toLocaleString()} nodes</span>
         )}
       </div>
     </article>
@@ -391,6 +415,20 @@ function MiniBoard({
   );
 }
 
+function averageNonNull(values: readonly (number | null)[]): number | null {
+  const measured = values.filter((value): value is number => value !== null);
+  if (measured.length === 0) return null;
+  return measured.reduce((total, value) => total + value, 0) / measured.length;
+}
+
+function formatAverage(
+  values: readonly (number | null)[],
+  suffix: string,
+): string {
+  const average = averageNonNull(values);
+  return average === null ? "no timing" : `${average.toFixed(1)}${suffix}`;
+}
+
 function ScenarioSkeletons() {
   return (
     <>
@@ -413,7 +451,7 @@ async function loadOverview(): Promise<EvalOverviewContract> {
 
 async function createRun(input: {
   readonly scenarioIds: readonly string[];
-  readonly provider: "openai" | "anthropic";
+  readonly searchDepth: number;
 }): Promise<EvalRunContract> {
   const response = await fetch("/api/evals/runs", {
     method: "POST",

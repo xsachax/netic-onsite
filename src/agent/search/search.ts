@@ -16,7 +16,7 @@ import type {
 
 const WIN_SCORE = 1_000_000;
 const DEFAULT_DEPTH = 4;
-const MAX_DEPTH = 7;
+const MAX_DEPTH = 8;
 const MOVE_ORDER = [3, 2, 4, 1, 5, 0, 6] as const;
 const WINDOW_SCORES = [0, 2, 12, 90, WIN_SCORE] as const;
 

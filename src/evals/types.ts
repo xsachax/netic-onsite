@@ -39,3 +39,12 @@ export interface EvalCaseExecution {
   readonly passed: boolean;
   readonly provider: AgentProvider;
 }
+
+export interface SearchEvalCaseExecution {
+  readonly scenario: EvalScenario;
+  readonly selectedMove: number;
+  readonly passed: boolean;
+  readonly searchDepth: number;
+  readonly searchNodes: number;
+  readonly searchDurationMs: number;
+}

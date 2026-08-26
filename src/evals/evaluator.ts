@@ -1,6 +1,7 @@
 import {
   chooseAgentMove,
   createConfiguredModel,
+  analyzeMoves,
   type AgentProvider,
 } from "@/agent";
 import { COLUMNS, getLegalMoves } from "@/domain/connect4";
@@ -9,6 +10,7 @@ import type {
   EvalCaseExecution,
   EvalScenario,
   EvalScenarioState,
+  SearchEvalCaseExecution,
 } from "./types";
 
 export function prepareEvalScenario(
@@ -75,6 +77,24 @@ export async function executeEvalScenario(options: {
     decision,
     passed: scenario.goldenMoves.includes(decision.column),
     provider: options.provider,
+  };
+}
+
+export function executeSearchEvalScenario(options: {
+  readonly scenario: EvalScenario;
+  readonly searchDepth: number;
+}): SearchEvalCaseExecution {
+  const { scenario, state } = prepareEvalScenario(options.scenario);
+  const search = analyzeMoves(state, { depth: options.searchDepth });
+  const selectedMove = search.moves[0].column;
+
+  return {
+    scenario,
+    selectedMove,
+    passed: scenario.goldenMoves.includes(selectedMove),
+    searchDepth: search.depth,
+    searchNodes: search.nodes,
+    searchDurationMs: search.durationMs,
   };
 }
 

@@ -41,6 +41,8 @@ export const evalResultSchema = z.object({
   provider: z.string().nullable(),
   model: z.string().nullable(),
   latencyMs: z.number().nullable(),
+  searchDepth: z.number().int().min(1).max(8).nullable(),
+  searchNodes: z.number().int().nonnegative().nullable(),
   totalTokens: z.number().int().nullable(),
   error: z.string().nullable(),
   createdAt: z.string(),
@@ -50,8 +52,10 @@ export const evalRunSchema = z.object({
   id: z.string().uuid(),
   datasetVersion: z.string(),
   policyVersion: z.string(),
+  benchmarkType: z.enum(["agent", "search"]),
+  searchDepth: z.number().int().min(1).max(8).nullable(),
   scenarioIds: z.array(z.string()),
-  provider: z.enum(["openai", "anthropic"]),
+  provider: z.enum(["openai", "anthropic"]).nullable(),
   status: z.enum(["running", "completed"]),
   totalCases: z.number().int().positive(),
   completedCases: z.number().int().nonnegative(),
@@ -70,7 +74,7 @@ export const evalOverviewSchema = z.object({
 
 export const createEvalRunRequestSchema = z.object({
   scenarioIds: z.array(z.string()).min(1).max(30),
-  provider: z.enum(["openai", "anthropic"]),
+  searchDepth: z.number().int().min(1).max(8),
 });
 
 export const executeEvalCaseRequestSchema = z.object({

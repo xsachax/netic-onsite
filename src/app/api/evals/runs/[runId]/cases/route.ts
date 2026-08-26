@@ -1,6 +1,5 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { AGENT_POLICY_VERSION } from "@/agent";
 import {
   DatabaseUnavailableError,
   EvalRunNotFoundError,
@@ -12,8 +11,9 @@ import {
 import {
   EVAL_DATASET_VERSION,
   executeEvalCaseRequestSchema,
-  executeEvalScenario,
+  executeSearchEvalScenario,
   findEvalScenario,
+  SEARCH_BENCHMARK_POLICY_VERSION,
 } from "@/evals";
 
 export const runtime = "nodejs";
@@ -58,11 +58,15 @@ export async function POST(
         `Run ${runId} belongs to dataset ${run.datasetVersion}.`,
       );
     }
-    if (run.policyVersion !== AGENT_POLICY_VERSION) {
+    if (
+      run.benchmarkType !== "search" ||
+      run.policyVersion !== SEARCH_BENCHMARK_POLICY_VERSION ||
+      run.searchDepth === null
+    ) {
       return errorResponse(
         409,
         "POLICY_VERSION_MISMATCH",
-        `Run ${runId} belongs to policy ${run.policyVersion}.`,
+        `Run ${runId} is not compatible with the current search benchmark.`,
       );
     }
 
@@ -84,11 +88,11 @@ export async function POST(
       return NextResponse.json({ run });
     }
 
-    let execution: Awaited<ReturnType<typeof executeEvalScenario>>;
+    let execution: ReturnType<typeof executeSearchEvalScenario>;
     try {
-      execution = await executeEvalScenario({
+      execution = executeSearchEvalScenario({
         scenario,
-        provider: run.provider,
+        searchDepth: run.searchDepth,
       });
     } catch (executionError) {
       return NextResponse.json({

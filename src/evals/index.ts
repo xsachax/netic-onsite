@@ -1,6 +1,7 @@
 export {
   evaluateSelectedMove,
   executeEvalScenario,
+  executeSearchEvalScenario,
   InvalidEvalScenarioError,
   prepareEvalScenario,
 } from "./evaluator";
@@ -10,6 +11,7 @@ export type {
   EvalScenario,
   EvalScenarioState,
   EvalSource,
+  SearchEvalCaseExecution,
 } from "./types";
 export {
   createEvalRunRequestSchema,
@@ -30,6 +32,7 @@ export {
   EVAL_SCENARIOS,
   findEvalScenario,
 } from "./dataset";
+export const SEARCH_BENCHMARK_POLICY_VERSION = "fixed-depth-search-v1";
 export {
   generatedEvalCandidateSchema,
   SIMULATION_DATA_VERSION,
