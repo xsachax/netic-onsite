@@ -15,3 +15,15 @@ export {
   type PersistentGame,
   PersistentGameNotFoundError,
 } from "./repository";
+export {
+  createEvalRun,
+  EvalRunLimitError,
+  EvalRunNotFoundError,
+  EvalScenarioNotInRunError,
+  getEvalRun,
+  listEvalRuns,
+  recordEvalExecution,
+  recordEvalFailure,
+  type StoredEvalResult,
+  type StoredEvalRun,
+} from "./eval-repository";

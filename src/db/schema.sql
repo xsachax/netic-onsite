@@ -58,3 +58,47 @@ CREATE INDEX IF NOT EXISTS games_created_at_idx ON games (created_at DESC);
 CREATE INDEX IF NOT EXISTS games_status_idx ON games (status);
 CREATE INDEX IF NOT EXISTS moves_agent_analytics_idx
   ON moves (player, strategy, provider, model);
+
+CREATE TABLE IF NOT EXISTS eval_runs (
+  id UUID PRIMARY KEY,
+  dataset_version TEXT NOT NULL,
+  scenario_ids TEXT[] NOT NULL,
+  provider TEXT NOT NULL CHECK (provider IN ('openai', 'anthropic')),
+  difficulty TEXT NOT NULL CHECK (difficulty IN ('easy', 'medium', 'hard')),
+  status TEXT NOT NULL DEFAULT 'running'
+    CHECK (status IN ('running', 'completed')),
+  total_cases SMALLINT NOT NULL CHECK (total_cases > 0),
+  completed_cases SMALLINT NOT NULL DEFAULT 0,
+  passed_cases SMALLINT NOT NULL DEFAULT 0,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  completed_at TIMESTAMPTZ,
+  CHECK (completed_cases BETWEEN 0 AND total_cases),
+  CHECK (passed_cases BETWEEN 0 AND completed_cases)
+);
+
+CREATE TABLE IF NOT EXISTS eval_results (
+  run_id UUID NOT NULL REFERENCES eval_runs(id) ON DELETE CASCADE,
+  scenario_id TEXT NOT NULL,
+  ordinal SMALLINT NOT NULL,
+  scenario_name TEXT NOT NULL,
+  category TEXT NOT NULL,
+  move_history JSONB NOT NULL,
+  golden_moves SMALLINT[] NOT NULL,
+  selected_move SMALLINT CHECK (selected_move BETWEEN 0 AND 6),
+  passed BOOLEAN NOT NULL,
+  strategy TEXT,
+  explanation TEXT,
+  trace JSONB,
+  provider TEXT,
+  model TEXT,
+  latency_ms DOUBLE PRECISION,
+  total_tokens INTEGER,
+  error TEXT,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  PRIMARY KEY (run_id, scenario_id)
+);
+
+CREATE INDEX IF NOT EXISTS eval_runs_created_at_idx
+  ON eval_runs (created_at DESC);
+CREATE INDEX IF NOT EXISTS eval_results_score_idx
+  ON eval_results (scenario_id, passed);
