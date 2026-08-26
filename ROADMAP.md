@@ -310,7 +310,7 @@ retries safe.
 | Deterministic engine owns state | LLMs are nondeterministic and cannot enforce rules | More orchestration code |
 | Hybrid LLM plus search | Demonstrates real agent/tool design and reliable tactics | Search adds CPU cost |
 | One TypeScript application | Fast local delivery and shared end-to-end types | Later services may use different runtimes |
-| Stateless history replay for demo | Works locally and across Vercel instances without shared memory | Durable cross-device resume waits for a database |
+| PostgreSQL event history plus optimistic versions | Durable resume, analytics, and safe horizontal concurrency | Requires a managed database and migrations |
 | Typed tools and schemas | Constrains model behavior and makes failures testable | Schema/prompt versions must be managed |
 | Explicit fallback | A complete game survives provider failure transparently | Fallback behavior must be evaluated too |
 | Append-only move history | Enables replay, audit, debugging, and evaluation | Requires snapshots/indexing at scale |

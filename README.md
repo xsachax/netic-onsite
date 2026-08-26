@@ -17,6 +17,7 @@ Requirements: Node.js 22+ and npm.
 ```bash
 npm install
 cp .env.example .env
+npm run db:migrate
 npm run dev
 ```
 
@@ -28,6 +29,7 @@ OPENAI_MODEL=gpt-5.4-mini
 ANTHROPIC_API_KEY=
 ANTHROPIC_MODEL=claude-haiku-4-5
 AGENT_PROVIDER=openai
+DATABASE_URL=
 ```
 
 Open the URL printed by Next.js. If no model key is configured, the UI clearly
@@ -38,8 +40,9 @@ playable.
 
 ```mermaid
 flowchart LR
-    UI[React client] -->|move history + human column| API[Stateless turn API]
-    API --> REPLAY[Replay canonical history]
+    UI[React client] -->|game ID + expected version| API[Versioned turn API]
+    API --> DB[(Neon Postgres)]
+    DB --> REPLAY[Replay append-only moves]
     REPLAY --> ENGINE[Deterministic engine]
     API --> ORCH[Agent orchestrator]
     ORCH --> GUARD[Tactical guard]
@@ -48,21 +51,27 @@ flowchart LR
     TOOLS --> SEARCH[Alpha-beta search]
     TOOLS --> ACTION[playMove proposal]
     ACTION --> ENGINE
-    ENGINE -->|state + trace| UI
+    ENGINE --> CAS[Atomic compare-and-swap commit]
+    CAS --> DB
+    DB -->|state + trace + analytics| UI
 ```
 
 ### State ownership
 
 - The board is a pure, immutable `GameState`.
 - Only `applyMove` can create the next state.
-- The server accepts move history, not a client-authored board.
-- The API reconstructs state by replaying every move through the engine.
-- Browser storage holds canonical move history for refresh/reconnect.
-- No server process memory is required, so local and Vercel behavior match.
+- PostgreSQL stores games, append-only moves, command IDs, and agent traces.
+- The API reconstructs state by replaying database moves through the engine.
+- Browser storage holds only the durable game ID and a validated local cache.
+- Every command carries `expectedVersion` and a UUID idempotency key.
+- A single SQL statement commits both human and agent moves only when the stored
+  version still matches.
+- No server process memory is required, so Vercel functions scale horizontally.
 
-This stateless demo architecture also prevents one browser's game from affecting
-another. Durable cross-device sessions would replace browser storage with an
-append-only PostgreSQL move table and optimistic game versions.
+Model execution occurs before the atomic database commit and outside a database
+transaction. Competing requests can both calculate, but PostgreSQL allows only
+one to commit; the loser receives `409 VERSION_CONFLICT` and reloads canonical
+state. Retrying the winning idempotency key returns the existing result.
 
 ## Agent loop
 
@@ -126,31 +135,46 @@ The UI exposes a per-turn trace with:
 
 No API key or hidden model reasoning is included in the trace.
 
+Aggregate analytics are computed directly from normalized game and move events:
+games, outcomes, model/tool strategies, fallback rate, model latency, and token
+usage. The UI shows live totals without exposing individual users or prompts.
+
 ## API
 
-`POST /api/turn`
+`POST /api/games` creates a durable game.
+
+`GET /api/games/:gameId` reconstructs its authoritative state.
+
+`POST /api/games/:gameId/turns`
 
 ```json
 {
-  "moves": [3, 2],
   "column": 3,
+  "expectedVersion": 2,
+  "idempotencyKey": "08adc0d8-8c52-48bc-ae6e-2631ff25cf26",
   "difficulty": "medium",
   "provider": "openai"
 }
 ```
 
-The server validates the request with Zod, replays `moves`, applies the human
-move, runs the agent if the game remains active, validates the agent action
-against the expected game version, and returns the new state plus trace.
+The server validates the request with Zod, loads canonical moves, applies the
+human move, runs the agent if the game remains active, and atomically commits the
+complete turn against the expected version.
 
 `GET /api/config` reports which providers are available and their public model
 names. It never returns credentials.
+
+`GET /api/analytics` returns aggregate gameplay and agent-operational metrics.
+
+The original stateless `POST /api/turn` remains as a local fallback when
+`DATABASE_URL` is not configured.
 
 ## Verification
 
 ```bash
 npm test       # deterministic engine, search, orchestration, history
 npm run eval   # tactical fixtures and seeded baseline matches
+npm run db:migrate
 npm run lint
 npm run build
 ```
@@ -181,8 +205,9 @@ position replay, prompt/model version comparisons, latency, and cost budgets.
 | Model proposes illegal move | Return validation feedback and retry once |
 | Model timeout/provider error | Visible deterministic search fallback |
 | Missing provider key | Visible deterministic search fallback |
-| Stale agent action | Reject if the game version changed |
-| Refresh | Rebuild state by replaying browser-stored move history |
+| Concurrent/stale action | Atomic version check; one commit, one `409` |
+| Duplicate request | Idempotency key returns current canonical result |
+| Refresh/new instance | Reload and replay PostgreSQL move events |
 
 ## Project structure
 
@@ -193,8 +218,9 @@ src/
     orchestrator.ts     # guards, retries, fallback, trace
     search/             # alpha-beta search and evaluation
   app/
-    api/                # stateless server routes
+    api/                # versioned game and analytics routes
     page.tsx            # playable UI and trace inspector
+  db/                   # Neon schema, repository, CAS commits, analytics
   domain/connect4/      # authoritative rules and state transitions
   evals/                # seeded tactical and head-to-head evaluation
   game/                 # history replay and shared API contracts
@@ -202,12 +228,10 @@ src/
 
 ## Production path
 
-1. Persist games, move events, agent versions, and traces in PostgreSQL.
-2. Use optimistic `game_version` checks and idempotency keys for every move.
-3. Move model turns to a retryable worker queue and stream completion with SSE.
-4. Add authentication, authorization by game owner, and per-user spend limits.
-5. Emit OpenTelemetry spans across API, replay, search, model calls, and storage.
-6. Pin an agent version per game and use seeded evaluations, canaries, and
+1. Move model turns to a retryable worker queue and stream completion with SSE.
+2. Add authentication, authorization by game owner, and per-user spend limits.
+3. Emit OpenTelemetry spans across API, replay, search, model calls, and storage.
+4. Pin an agent version per game and use seeded evaluations, canaries, and
    rollback thresholds for model/prompt/tool changes.
 
 See [`ROADMAP.md`](./ROADMAP.md) for the complete delivery and scaling plan.
