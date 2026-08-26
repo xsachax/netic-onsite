@@ -30,3 +30,16 @@ export {
   EVAL_SCENARIOS,
   findEvalScenario,
 } from "./dataset";
+export {
+  generatedEvalCandidateSchema,
+  SIMULATION_DATA_VERSION,
+  simulateGames,
+  simulationBatchSchema,
+  simulationPolicySchema,
+  type GeneratedEvalCandidate,
+  type SimulatedGame,
+  type SimulationBatch,
+  type SimulationOptions,
+  type SimulationPolicy,
+  type SimulationStage,
+} from "./simulation";

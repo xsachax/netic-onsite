@@ -10,6 +10,8 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "eval": "tsx src/evals/run.ts",
+    "eval:generate": "tsx src/evals/generate.ts",
+    "eval:generated": "tsx --env-file-if-exists=.env.local --env-file-if-exists=.env src/evals/run-generated.ts",
     "db:migrate": "tsx --env-file=.env.local src/db/migrate.ts"
   },
   "dependencies": {
