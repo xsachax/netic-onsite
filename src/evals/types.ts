@@ -1,6 +1,5 @@
 import type {
   AgentDecision,
-  AgentDifficulty,
   AgentProvider,
 } from "@/agent";
 import type { GameState } from "@/domain/connect4";
@@ -38,6 +37,5 @@ export interface EvalCaseExecution {
   readonly scenario: EvalScenario;
   readonly decision: AgentDecision;
   readonly passed: boolean;
-  readonly difficulty: AgentDifficulty;
   readonly provider: AgentProvider;
 }

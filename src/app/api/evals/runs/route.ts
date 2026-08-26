@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { AGENT_POLICY_VERSION } from "@/agent";
 import {
   createEvalRun,
   DatabaseUnavailableError,
@@ -57,9 +58,9 @@ export async function POST(request: Request): Promise<NextResponse> {
   try {
     const run = await createEvalRun({
       datasetVersion: EVAL_DATASET_VERSION,
+      policyVersion: AGENT_POLICY_VERSION,
       scenarioIds: uniqueScenarioIds,
       provider: parsed.data.provider,
-      difficulty: parsed.data.difficulty,
     });
     return NextResponse.json({ run }, { status: 201 });
   } catch (error) {

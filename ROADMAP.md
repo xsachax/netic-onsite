@@ -26,8 +26,8 @@ scaling steps rather than incomplete MVP work.
 - An authoritative, deterministic Connect 4 engine.
 - Validation for turns, full columns, terminal games, wins, and draws.
 - An LLM agent that receives structured observations and returns typed actions.
-- A tactical search tool the agent can use instead of relying only on language
-  model intuition.
+- An authoritative tactical search policy that does not rely on language model
+  intuition.
 - Explicit handling for timeouts, malformed output, and provider errors.
 - A visible per-turn trace: observation, tools used, selected move, explanation,
   latency, and whether fallback was used.
@@ -37,7 +37,7 @@ scaling steps rather than incomplete MVP work.
 
 ### Ship if the core is stable
 
-- Difficulty levels implemented as different search depths/tool budgets.
+- Selective depth refinement for close search candidates.
 - Game replay from an append-only move history.
 - Agent-versus-agent evaluation.
 - Model/provider selection through configuration.
@@ -87,8 +87,8 @@ flowchart LR
 3. **The API orchestrates turns.** It reconstructs authoritative state by
    replaying move history, applies the human move, invokes the agent, validates
    the proposed action, and applies the agent move.
-4. **The model is untrusted input.** All output is schema-validated and checked
-   against current legal moves.
+4. **The model is untrusted input.** All output is schema-validated and must
+   match the single move selected by search.
 5. **Every decision is inspectable.** A turn records model/config version, tool
    calls, action, explanation, latency, and errors.
 
@@ -122,8 +122,8 @@ Send a compact structured state rather than an ambiguous board-only prompt:
 ### Tools
 
 - `get_legal_moves()` returns columns valid for the current state.
-- `analyze_moves(depth)` runs deterministic alpha-beta search and returns ranked
-  moves with scores and principal variations.
+- `analyze_moves()` returns the orchestrator's precomputed deterministic ranking
+  with scores and principal variations.
 - `inspect_move(column)` reports immediate wins, blocks, and tactical risks.
 - `play_move(column, explanation)` proposes an action; the engine still performs
   final validation and application.
@@ -131,18 +131,18 @@ Send a compact structured state rather than an ambiguous board-only prompt:
 ### Decision loop
 
 1. Build an immutable observation from the current state.
-2. Apply deterministic tactical guards: take an immediate win and identify
-   mandatory blocks.
-3. Let the LLM inspect legal moves and call bounded analysis tools.
-4. Require a typed `play_move` action.
-5. Validate the action against the unchanged game version.
-6. Retry once with the validation error if the action is malformed or illegal.
-7. On provider failure, visibly use a deterministic search fallback and record
+2. Rank all legal moves at depth 6 and selectively refine close candidates at
+   depth 7.
+3. Apply deterministic tactical guards for an immediate win or mandatory block.
+4. Otherwise, select one move with deterministic score and center-first ordering.
+5. Let the LLM inspect the analysis and explain that selected move.
+6. Require a typed `play_move` action matching the unchanged selected column.
+7. Retry once with precise feedback if the action is malformed or different.
+8. On provider failure, visibly use a deterministic search fallback and record
    the degraded decision in the trace.
 
-This design uses the LLM for planning, tool selection, explanation, and strategic
-choice while keeping rules and safety deterministic. The fallback is explicit,
-not silent.
+This design uses the LLM for tool interaction and player-facing explanation
+while search owns strategic choice. The fallback is explicit, not silent.
 
 ## Build Plan to 2:45 PM
 
@@ -166,7 +166,7 @@ state behavior.
 ### 1:10-1:35 — Phase 2: Hybrid agent
 
 - Add alpha-beta minimax with center weighting, window scoring, move ordering,
-  and a depth/time budget.
+  fixed depth 6, and selective depth-7 refinement.
 - Define typed tools and the structured model contract.
 - Add the provider adapter and agent orchestrator.
 - Add immediate-win and mandatory-block fixtures.

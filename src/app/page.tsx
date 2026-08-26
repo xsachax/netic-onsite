@@ -28,7 +28,6 @@ interface StoredGame {
   readonly gameId: string | null;
   readonly moves: readonly number[];
   readonly provider: "openai" | "anthropic";
-  readonly difficulty: "easy" | "medium" | "hard";
   readonly agentDecision: AgentDecisionContract | null;
 }
 
@@ -36,7 +35,6 @@ const storedGameSchema = z.object({
   gameId: z.string().uuid().nullable().optional().default(null),
   moves: z.array(z.number().int().min(0).max(6)).max(42),
   provider: z.enum(["openai", "anthropic"]),
-  difficulty: z.enum(["easy", "medium", "hard"]),
   agentDecision: agentDecisionSchema.nullable(),
 });
 
@@ -46,9 +44,6 @@ export default function Home() {
   const [agentDecision, setAgentDecision] =
     useState<AgentDecisionContract | null>(null);
   const [provider, setProvider] = useState<"openai" | "anthropic">("openai");
-  const [difficulty, setDifficulty] = useState<"easy" | "medium" | "hard">(
-    "medium",
-  );
   const [config, setConfig] = useState<ConfigResponse | null>(null);
   const [analytics, setAnalytics] = useState<AnalyticsResponse | null>(null);
   const [isHydrated, setIsHydrated] = useState(false);
@@ -64,13 +59,11 @@ export default function Home() {
       await Promise.resolve();
       if (!active) return;
 
-      const storedDifficulty = stored?.difficulty ?? "medium";
       if (stored) {
         try {
           setGame(replayGame(stored.moves));
           setGameId(stored.gameId);
           setProvider(stored.provider);
-          setDifficulty(stored.difficulty);
           setAgentDecision(stored.agentDecision);
         } catch {
           localStorage.removeItem(STORAGE_KEY);
@@ -93,12 +86,10 @@ export default function Home() {
             persistentGame = stored?.gameId
               ? await loadPersistentGame(stored.gameId)
               : await createRemoteGame(
-                  storedDifficulty,
                   stored?.provider ?? nextConfig.defaultProvider,
                 );
           } catch {
             persistentGame = await createRemoteGame(
-              storedDifficulty,
               stored?.provider ?? nextConfig.defaultProvider,
             );
           }
@@ -108,7 +99,6 @@ export default function Home() {
             setGameId,
             setGame,
             setAgentDecision,
-            setDifficulty,
             setProvider,
           });
           setAnalytics(await loadAnalytics());
@@ -138,11 +128,10 @@ export default function Home() {
       gameId,
       moves: game.moves.map(({ column }) => column),
       provider,
-      difficulty,
       agentDecision,
     };
     localStorage.setItem(STORAGE_KEY, JSON.stringify(stored));
-  }, [agentDecision, difficulty, game, gameId, isHydrated, provider]);
+  }, [agentDecision, game, gameId, isHydrated, provider]);
 
   const playColumn = useCallback(
     async (column: number) => {
@@ -172,13 +161,11 @@ export default function Home() {
                     column,
                     expectedVersion: game.version,
                     idempotencyKey: crypto.randomUUID(),
-                    difficulty,
                     provider,
                   }
                 : {
                     moves: game.moves.map((move) => move.column),
                     column,
-                    difficulty,
                     provider,
                   },
             ),
@@ -193,7 +180,6 @@ export default function Home() {
               setGameId,
               setGame,
               setAgentDecision,
-              setDifficulty,
               setProvider,
             });
           }
@@ -206,7 +192,6 @@ export default function Home() {
             setGameId,
             setGame,
             setAgentDecision,
-            setDifficulty,
             setProvider,
           });
           void loadAnalytics().then(setAnalytics);
@@ -225,7 +210,7 @@ export default function Home() {
         setIsThinking(false);
       }
     },
-    [config, difficulty, game, gameId, isThinking, legalMoves, provider],
+    [config, game, gameId, isThinking, legalMoves, provider],
   );
 
   async function resetGame(): Promise<void> {
@@ -234,12 +219,11 @@ export default function Home() {
 
     try {
       if (config?.persistence.available) {
-        const nextGame = await createRemoteGame(difficulty, provider);
+        const nextGame = await createRemoteGame(provider);
         applyPersistentGame(nextGame, {
           setGameId,
           setGame,
           setAgentDecision,
-          setDifficulty,
           setProvider,
         });
         setAnalytics(await loadAnalytics());
@@ -303,22 +287,6 @@ export default function Home() {
                     {config && !config.providers[option].available && (
                       <span className="unavailable-dot" title="Key not configured" />
                     )}
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            <div className="control-group">
-              <span>Search depth</span>
-              <div className="segmented-control">
-                {(["easy", "medium", "hard"] as const).map((option) => (
-                  <button
-                    className={difficulty === option ? "selected" : ""}
-                    key={option}
-                    onClick={() => setDifficulty(option)}
-                    type="button"
-                  >
-                    {option}
                   </button>
                 ))}
               </div>
@@ -623,13 +591,12 @@ async function loadConfig(): Promise<ConfigResponse> {
 }
 
 async function createRemoteGame(
-  difficulty: "easy" | "medium" | "hard",
   provider: "openai" | "anthropic",
 ): Promise<PersistentGameContract> {
   const response = await fetch("/api/games", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ difficulty, provider }),
+    body: JSON.stringify({ provider }),
   });
   const payload: unknown = await response.json();
   if (!response.ok) {
@@ -666,14 +633,12 @@ function applyPersistentGame(
     readonly setGameId: (value: string) => void;
     readonly setGame: (value: GameState) => void;
     readonly setAgentDecision: (value: AgentDecisionContract | null) => void;
-    readonly setDifficulty: (value: "easy" | "medium" | "hard") => void;
     readonly setProvider: (value: "openai" | "anthropic") => void;
   },
 ): void {
   setters.setGameId(persistentGame.id);
   setters.setGame(persistentGame.state);
   setters.setAgentDecision(persistentGame.latestAgentDecision);
-  setters.setDifficulty(persistentGame.difficulty);
   setters.setProvider(persistentGame.provider);
 }
 

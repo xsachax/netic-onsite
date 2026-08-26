@@ -3,18 +3,16 @@ import { analyzeMoves } from "./search";
 import type {
   AgentDecision,
   AgentDecisionModel,
-  AgentDifficulty,
   AgentStrategy,
   AgentToolCall,
   AgentUsage,
   ModelDecision,
 } from "./types";
 
-const DEPTH_BY_DIFFICULTY: Record<AgentDifficulty, number> = {
-  easy: 2,
-  medium: 4,
-  hard: 6,
-};
+const BASE_SEARCH_DEPTH = 6;
+const EXTENDED_SEARCH_DEPTH = 7;
+const CLOSE_SCORE_MARGIN = 12;
+export const AGENT_POLICY_VERSION = "d6-selective-d7-margin12-v1";
 
 const EMPTY_USAGE: AgentUsage = {
   inputTokens: null,
@@ -24,20 +22,18 @@ const EMPTY_USAGE: AgentUsage = {
 
 export async function chooseAgentMove(options: {
   readonly state: GameState;
-  readonly difficulty: AgentDifficulty;
   readonly model: AgentDecisionModel | null;
 }): Promise<AgentDecision> {
   const startedAt = performance.now();
-  const { state, difficulty, model } = options;
+  const { state, model } = options;
   const legalMoves = getLegalMoves(state);
 
   if (state.status !== "playing" || legalMoves.length === 0) {
     throw new Error("The agent cannot move in a terminal game.");
   }
 
-  const search = analyzeMoves(state, {
-    depth: DEPTH_BY_DIFFICULTY[difficulty],
-  });
+  const search = rankMoves(state);
+  const admissibleColumns: readonly [number] = [search.moves[0].column];
   const tacticalMove = search.moves.find(
     ({ category }) =>
       category === "immediate-win" || category === "forced-block",
@@ -85,7 +81,9 @@ export async function chooseAgentMove(options: {
     try {
       decision = await model.decide({
         state,
-        searchDepth: DEPTH_BY_DIFFICULTY[difficulty],
+        searchDepth: search.depth,
+        rankedMoves: search.moves,
+        admissibleColumns,
         validationFeedback,
       });
     } catch {
@@ -104,7 +102,10 @@ export async function chooseAgentMove(options: {
     toolCalls.push(...decision.toolCalls);
     usage = addUsage(usage, decision.usage);
 
-    if (legalMoves.includes(decision.column)) {
+    if (
+      legalMoves.includes(decision.column) &&
+      admissibleColumns.includes(decision.column)
+    ) {
       return buildDecision({
         column: decision.column,
         explanation: decision.explanation,
@@ -120,13 +121,15 @@ export async function chooseAgentMove(options: {
       });
     }
 
-    validationFeedback = `Column ${decision.column} is illegal. Legal columns: ${legalMoves.join(
-      ", ",
-    )}.`;
+    validationFeedback = legalMoves.includes(decision.column)
+      ? `Column ${decision.column} is legal but search selected column ${admissibleColumns[0]}. Choose column ${admissibleColumns[0]}.`
+      : `Column ${decision.column} is illegal. Legal columns: ${legalMoves.join(
+          ", ",
+        )}. Search selected column ${admissibleColumns[0]}.`;
   }
 
   return searchFallback({
-    reason: "The model proposed an illegal move twice.",
+    reason: "The model rejected the authoritative search move twice.",
     state,
     search,
     model,
@@ -135,6 +138,30 @@ export async function chooseAgentMove(options: {
     usage,
     startedAt,
   });
+}
+
+function rankMoves(state: GameState): ReturnType<typeof analyzeMoves> {
+  const baseSearch = analyzeMoves(state, { depth: BASE_SEARCH_DEPTH });
+  const topScore = baseSearch.moves[0].score;
+  const closeColumns = baseSearch.moves
+    .filter((move) => topScore - move.score <= CLOSE_SCORE_MARGIN)
+    .map((move) => move.column);
+
+  if (closeColumns.length === 1) {
+    return baseSearch;
+  }
+
+  const refinedSearch = analyzeMoves(state, {
+    depth: EXTENDED_SEARCH_DEPTH,
+    columns: closeColumns,
+  });
+
+  return {
+    ...refinedSearch,
+    nodes: baseSearch.nodes + refinedSearch.nodes,
+    durationMs:
+      Math.round((baseSearch.durationMs + refinedSearch.durationMs) * 10) / 10,
+  };
 }
 
 function searchFallback(options: {

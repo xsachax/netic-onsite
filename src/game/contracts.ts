@@ -69,7 +69,6 @@ export const agentDecisionSchema = z.object({
 export const turnRequestSchema = z.object({
   moves: z.array(z.number().int().min(0).max(6)).max(42),
   column: z.number().int().min(0).max(6),
-  difficulty: z.enum(["easy", "medium", "hard"]).default("medium"),
   provider: z.enum(["openai", "anthropic"]).default("openai"),
 });
 
@@ -79,7 +78,6 @@ export const turnResponseSchema = z.object({
 });
 
 export const createGameRequestSchema = z.object({
-  difficulty: z.enum(["easy", "medium", "hard"]).default("medium"),
   provider: z.enum(["openai", "anthropic"]).default("openai"),
 });
 
@@ -87,14 +85,12 @@ export const persistentTurnRequestSchema = z.object({
   column: z.number().int().min(0).max(6),
   expectedVersion: z.number().int().min(0).max(41),
   idempotencyKey: z.string().uuid(),
-  difficulty: z.enum(["easy", "medium", "hard"]).default("medium"),
   provider: z.enum(["openai", "anthropic"]).default("openai"),
 });
 
 export const persistentGameSchema = z.object({
   id: z.string().uuid(),
   state: gameStateSchema,
-  difficulty: z.enum(["easy", "medium", "hard"]),
   provider: z.enum(["openai", "anthropic"]),
   latestAgentDecision: agentDecisionSchema.nullable(),
   createdAt: z.string(),

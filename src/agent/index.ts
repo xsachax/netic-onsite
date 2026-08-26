@@ -1,10 +1,9 @@
 export { createConfiguredModel } from "./ai-sdk-model";
-export { chooseAgentMove } from "./orchestrator";
+export { AGENT_POLICY_VERSION, chooseAgentMove } from "./orchestrator";
 export { analyzeMoves, inspectMove } from "./search";
 export type {
   AgentDecision,
   AgentDecisionModel,
-  AgentDifficulty,
   AgentProvider,
   AgentStrategy,
   AgentToolCall,

@@ -16,9 +16,6 @@ export default function EvaluationsPage() {
   const [activeRun, setActiveRun] = useState<EvalRunContract | null>(null);
   const [selectedIds, setSelectedIds] = useState<readonly string[]>([]);
   const [provider, setProvider] = useState<"openai" | "anthropic">("openai");
-  const [difficulty, setDifficulty] = useState<"easy" | "medium" | "hard">(
-    "medium",
-  );
   const [runningScenarioId, setRunningScenarioId] = useState<string | null>(
     null,
   );
@@ -69,7 +66,6 @@ export default function EvaluationsPage() {
       let run = await createRun({
         scenarioIds: selectedIds,
         provider,
-        difficulty,
       });
       setActiveRun(run);
 
@@ -138,22 +134,6 @@ export default function EvaluationsPage() {
                 type="button"
               >
                 {option === "openai" ? "OpenAI" : "Anthropic"}
-              </button>
-            ))}
-          </div>
-        </div>
-        <div className="eval-control">
-          <span>Agent policy</span>
-          <div className="segmented-control">
-            {(["easy", "medium", "hard"] as const).map((option) => (
-              <button
-                className={difficulty === option ? "selected" : ""}
-                disabled={isRunning}
-                key={option}
-                onClick={() => setDifficulty(option)}
-                type="button"
-              >
-                {option}
               </button>
             ))}
           </div>
@@ -266,9 +246,10 @@ export default function EvaluationsPage() {
                 {Math.round(run.passRate * 100)}%
               </span>
               <div>
-                <strong>{run.provider} · {run.difficulty}</strong>
+                <strong>{run.provider}</strong>
                 <small>
                   {run.passedCases}/{run.completedCases} passed ·{" "}
+                  {run.policyVersion} ·{" "}
                   {new Date(run.createdAt).toLocaleTimeString()}
                 </small>
               </div>
@@ -308,7 +289,7 @@ function RunSummary({ run }: { readonly run: EvalRunContract }) {
       </div>
       <div>
         <span>Configuration</span>
-        <strong>{run.provider} · {run.difficulty}</strong>
+        <strong>{run.provider} · {run.policyVersion}</strong>
       </div>
     </section>
   );
@@ -433,7 +414,6 @@ async function loadOverview(): Promise<EvalOverviewContract> {
 async function createRun(input: {
   readonly scenarioIds: readonly string[];
   readonly provider: "openai" | "anthropic";
-  readonly difficulty: "easy" | "medium" | "hard";
 }): Promise<EvalRunContract> {
   const response = await fetch("/api/evals/runs", {
     method: "POST",

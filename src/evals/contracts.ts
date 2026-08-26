@@ -49,9 +49,9 @@ export const evalResultSchema = z.object({
 export const evalRunSchema = z.object({
   id: z.string().uuid(),
   datasetVersion: z.string(),
+  policyVersion: z.string(),
   scenarioIds: z.array(z.string()),
   provider: z.enum(["openai", "anthropic"]),
-  difficulty: z.enum(["easy", "medium", "hard"]),
   status: z.enum(["running", "completed"]),
   totalCases: z.number().int().positive(),
   completedCases: z.number().int().nonnegative(),
@@ -71,7 +71,6 @@ export const evalOverviewSchema = z.object({
 export const createEvalRunRequestSchema = z.object({
   scenarioIds: z.array(z.string()).min(1).max(30),
   provider: z.enum(["openai", "anthropic"]),
-  difficulty: z.enum(["easy", "medium", "hard"]),
 });
 
 export const executeEvalCaseRequestSchema = z.object({

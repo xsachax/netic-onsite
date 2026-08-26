@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
+import { AGENT_POLICY_VERSION } from "@/agent";
 import {
   DatabaseUnavailableError,
   EvalRunNotFoundError,
@@ -57,6 +58,13 @@ export async function POST(
         `Run ${runId} belongs to dataset ${run.datasetVersion}.`,
       );
     }
+    if (run.policyVersion !== AGENT_POLICY_VERSION) {
+      return errorResponse(
+        409,
+        "POLICY_VERSION_MISMATCH",
+        `Run ${runId} belongs to policy ${run.policyVersion}.`,
+      );
+    }
 
     const scenario = findEvalScenario(parsed.data.scenarioId);
     if (!scenario) {
@@ -81,7 +89,6 @@ export async function POST(
       execution = await executeEvalScenario({
         scenario,
         provider: run.provider,
-        difficulty: run.difficulty,
       });
     } catch (executionError) {
       return NextResponse.json({

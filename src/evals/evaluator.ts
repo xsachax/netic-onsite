@@ -1,7 +1,6 @@
 import {
   chooseAgentMove,
   createConfiguredModel,
-  type AgentDifficulty,
   type AgentProvider,
 } from "@/agent";
 import { COLUMNS, getLegalMoves } from "@/domain/connect4";
@@ -63,13 +62,11 @@ export function evaluateSelectedMove(
 
 export async function executeEvalScenario(options: {
   readonly scenario: EvalScenario;
-  readonly difficulty: AgentDifficulty;
   readonly provider: AgentProvider;
 }): Promise<EvalCaseExecution> {
   const { scenario, state } = prepareEvalScenario(options.scenario);
   const decision = await chooseAgentMove({
     state,
-    difficulty: options.difficulty,
     model: createConfiguredModel(options.provider),
   });
 
@@ -77,7 +74,6 @@ export async function executeEvalScenario(options: {
     scenario,
     decision,
     passed: scenario.goldenMoves.includes(decision.column),
-    difficulty: options.difficulty,
     provider: options.provider,
   };
 }

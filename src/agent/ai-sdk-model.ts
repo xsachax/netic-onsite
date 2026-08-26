@@ -8,7 +8,7 @@ import {
 } from "ai";
 import { z } from "zod";
 import { getLegalMoves } from "@/domain/connect4";
-import { analyzeMoves, inspectMove } from "./search";
+import { inspectMove } from "./search";
 import type {
   AgentDecisionModel,
   AgentProvider,
@@ -35,11 +35,13 @@ const SYSTEM_PROMPT = `You are a Connect 4 decision-making agent.
 You are player 2. The board is 6 rows by 7 columns and uses 0 for empty,
 1 for the human, and 2 for you. Pieces fall to the lowest open row.
 
-You must interact through tools. Inspect the legal moves and tactical analysis,
-then finish by calling playMove exactly once. Never invent or modify board state.
-Priorities: win immediately, block an immediate loss, avoid giving the opponent
-an immediate win, and then maximize long-term position. Keep the explanation
-brief and do not expose hidden chain-of-thought.`;
+The observation contains an authoritative deterministic move ranking and exactly
+one admissible column selected by search. You must play that column and explain
+it. Do not override the ranking or choose a search depth.
+
+You must interact through tools, then finish by calling playMove exactly once.
+Never invent or modify board state. Keep the explanation brief and do not expose
+hidden chain-of-thought.`;
 
 export function createConfiguredModel(
   provider: AgentProvider,
@@ -86,16 +88,13 @@ async function decideWithTools(
     }),
     analyzeMoves: tool({
       description:
-        "Rank every legal move with deterministic alpha-beta search.",
-      inputSchema: z.object({
-        depth: z.number().int().min(1).max(request.searchDepth),
-      }),
+        "Return the authoritative precomputed deterministic move ranking.",
+      inputSchema: z.object({}),
       execute: async (input) => {
-        const result = analyzeMoves(request.state, { depth: input.depth });
         const output = {
-          depth: result.depth,
-          nodes: result.nodes,
-          moves: result.moves,
+          depth: request.searchDepth,
+          moves: request.rankedMoves,
+          admissibleColumns: request.admissibleColumns,
         };
         toolCalls.push({ name: "analyzeMoves", input, output });
         return output;
@@ -115,15 +114,19 @@ async function decideWithTools(
     }),
     playMove: tool({
       description:
-        "Propose the final Connect 4 action. The game engine validates it.",
+        "Play the single authoritative admissible column and explain the move.",
       inputSchema: actionSchema,
       execute: async (input) => {
         proposedAction = input;
+        const isLegal = legalMoves.includes(input.column);
+        const isAdmissible = request.admissibleColumns.includes(input.column);
         const output = {
-          accepted: legalMoves.includes(input.column),
-          error: legalMoves.includes(input.column)
-            ? null
-            : `Column ${input.column} is not currently legal.`,
+          accepted: isLegal && isAdmissible,
+          error: !isLegal
+            ? `Column ${input.column} is not currently legal.`
+            : !isAdmissible
+              ? `Column ${input.column} is legal but search selected column ${request.admissibleColumns[0]}.`
+              : null,
         };
         toolCalls.push({ name: "playMove", input, output });
         return output;
@@ -137,6 +140,11 @@ async function decideWithTools(
     board: request.state.board,
     currentPlayer: request.state.currentPlayer,
     legalMoves,
+    authoritativeSearch: {
+      depth: request.searchDepth,
+      rankedMoves: request.rankedMoves,
+    },
+    admissibleColumns: request.admissibleColumns,
     moveHistory: request.state.moves.map(({ player, column }) => ({
       player,
       column,
@@ -154,6 +162,7 @@ async function decideWithTools(
     toolChoice: "required",
     stopWhen: [hasToolCall("playMove"), stepCountIs(5)],
     maxRetries: 1,
+    temperature: 0,
     timeout: 12_000,
   });
 

@@ -145,7 +145,7 @@ If you finish the core requirements early, you can extend the project in any dir
 Some examples:
 
 - A polished web UI
-- Multiple difficulty levels
+- Selective search-depth refinement
 - Agent-vs-agent games
 - Game replay
 - Persistent game history

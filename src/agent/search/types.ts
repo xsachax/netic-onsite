@@ -21,4 +21,5 @@ export interface SearchResult {
 
 export interface SearchOptions {
   readonly depth?: number;
+  readonly columns?: readonly number[];
 }

@@ -1,7 +1,6 @@
 import {
   chooseAgentMove,
   createConfiguredModel,
-  type AgentDifficulty,
   type AgentProvider,
 } from "@/agent";
 import { applyMove, GameRuleError } from "@/domain/connect4";
@@ -18,7 +17,6 @@ export async function executePersistentTurn(options: {
   readonly column: number;
   readonly expectedVersion: number;
   readonly idempotencyKey: string;
-  readonly difficulty: AgentDifficulty;
   readonly provider: AgentProvider;
 }): Promise<{
   readonly game: PersistentGame;
@@ -60,7 +58,6 @@ export async function executePersistentTurn(options: {
       gameId: options.gameId,
       expectedVersion: options.expectedVersion,
       idempotencyKey: options.idempotencyKey,
-      difficulty: options.difficulty,
       provider: options.provider,
       resultingState: afterHumanMove,
       humanMove,
@@ -71,7 +68,6 @@ export async function executePersistentTurn(options: {
 
   const agentDecision = await chooseAgentMove({
     state: afterHumanMove,
-    difficulty: options.difficulty,
     model: createConfiguredModel(options.provider),
   });
   const resultingState = applyMove(afterHumanMove, agentDecision.column, 2);
@@ -84,7 +80,6 @@ export async function executePersistentTurn(options: {
     gameId: options.gameId,
     expectedVersion: options.expectedVersion,
     idempotencyKey: options.idempotencyKey,
-    difficulty: options.difficulty,
     provider: options.provider,
     resultingState,
     humanMove,

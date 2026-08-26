@@ -29,6 +29,8 @@ export interface ModelDecision {
 export interface ModelDecisionRequest {
   readonly state: GameState;
   readonly searchDepth: number;
+  readonly rankedMoves: SearchResult["moves"];
+  readonly admissibleColumns: readonly [number];
   readonly validationFeedback?: string;
 }
 
@@ -61,5 +63,3 @@ export interface AgentDecision {
   readonly explanation: string;
   readonly trace: AgentTrace;
 }
-
-export type AgentDifficulty = "easy" | "medium" | "hard";

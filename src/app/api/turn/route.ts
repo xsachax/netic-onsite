@@ -56,7 +56,6 @@ export async function POST(request: Request): Promise<NextResponse> {
     const model = createConfiguredModel(parsed.data.provider);
     const agentDecision = await chooseAgentMove({
       state: afterHumanMove,
-      difficulty: parsed.data.difficulty,
       model,
     });
 

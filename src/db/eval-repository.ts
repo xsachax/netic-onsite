@@ -1,7 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { z } from "zod";
 import type {
-  AgentDifficulty,
   AgentProvider,
   AgentTrace,
 } from "@/agent";
@@ -14,9 +13,9 @@ const MAX_PUBLIC_CASES_PER_HOUR = 100;
 const evalRunRowSchema = z.object({
   id: z.string().uuid(),
   dataset_version: z.string(),
+  policy_version: z.string(),
   scenario_ids: z.array(z.string()),
   provider: z.enum(["openai", "anthropic"]),
-  difficulty: z.enum(["easy", "medium", "hard"]),
   status: z.enum(["running", "completed"]),
   total_cases: z.coerce.number().int(),
   completed_cases: z.coerce.number().int(),
@@ -72,9 +71,9 @@ export interface StoredEvalResult {
 export interface StoredEvalRun {
   readonly id: string;
   readonly datasetVersion: string;
+  readonly policyVersion: string;
   readonly scenarioIds: readonly string[];
   readonly provider: AgentProvider;
-  readonly difficulty: AgentDifficulty;
   readonly status: "running" | "completed";
   readonly totalCases: number;
   readonly completedCases: number;
@@ -110,9 +109,9 @@ export class EvalScenarioNotInRunError extends Error {
 
 export async function createEvalRun(options: {
   readonly datasetVersion: string;
+  readonly policyVersion: string;
   readonly scenarioIds: readonly string[];
   readonly provider: AgentProvider;
-  readonly difficulty: AgentDifficulty;
 }): Promise<StoredEvalRun> {
   const sql = getDatabase();
   const recentRows = await sql`
@@ -133,17 +132,17 @@ export async function createEvalRun(options: {
     INSERT INTO eval_runs (
       id,
       dataset_version,
+      policy_version,
       scenario_ids,
       provider,
-      difficulty,
       total_cases
     )
     VALUES (
       ${id},
       ${options.datasetVersion},
+      ${options.policyVersion},
       ${options.scenarioIds},
       ${options.provider},
-      ${options.difficulty},
       ${options.scenarioIds.length}
     )
   `;
@@ -159,9 +158,9 @@ export async function getEvalRun(runId: string): Promise<StoredEvalRun> {
         SELECT
           id,
           dataset_version,
+          policy_version,
           scenario_ids,
           provider,
-          difficulty,
           status,
           total_cases,
           completed_cases,
@@ -208,9 +207,9 @@ export async function getEvalRun(runId: string): Promise<StoredEvalRun> {
   return {
     id: run.id,
     datasetVersion: run.dataset_version,
+    policyVersion: run.policy_version,
     scenarioIds: run.scenario_ids,
     provider: run.provider,
-    difficulty: run.difficulty,
     status: run.status,
     totalCases: run.total_cases,
     completedCases: run.completed_cases,

@@ -47,9 +47,9 @@ flowchart LR
     REPLAY --> ENGINE[Deterministic engine]
     API --> ORCH[Agent orchestrator]
     ORCH --> GUARD[Tactical guard]
+    ORCH --> SEARCH[Authoritative alpha-beta ranking]
     ORCH --> LLM[OpenAI or Anthropic]
     LLM <--> TOOLS[Typed tool loop]
-    TOOLS --> SEARCH[Alpha-beta search]
     TOOLS --> ACTION[playMove proposal]
     ACTION --> ENGINE
     ENGINE --> CAS[Atomic compare-and-swap commit]
@@ -83,6 +83,8 @@ fresh user observation containing:
 - The complete 6x7 board.
 - Current player.
 - Legal columns.
+- The authoritative fixed-depth move ranking.
+- The single search-selected admissible column.
 - Canonical move history.
 - Validation feedback from a prior invalid proposal, when applicable.
 
@@ -96,17 +98,25 @@ requests stateless.
 | Tool | Purpose |
 | --- | --- |
 | `getLegalMoves` | Observe columns accepted by the current engine state |
-| `analyzeMoves` | Rank legal actions with bounded alpha-beta search |
+| `analyzeMoves` | Return the orchestrator's precomputed authoritative ranking |
 | `inspectMove` | Check one candidate for wins, blocks, and tactical risk |
 | `playMove` | Propose a typed `{ column, explanation }` action |
 
+The orchestrator ranks all legal moves at depth 6. When the leading scores are
+within 12 points, it selectively reruns only those root candidates at depth 7,
+then selects the first result using deterministic score and center-first
+ordering. Exactly one column is admissible. The model explains that move; it
+does not establish search depth, move quality, or the selected action.
+
 The model is required to use tools and finish with `playMove`. The orchestrator
-validates the selected column against the unchanged state. An illegal proposal
-gets one corrective retry; a second invalid proposal, timeout, provider error,
-or missing key activates an explicit search fallback.
+accepts the proposal only when it is both legal and admissible against the
+unchanged state. An illegal or lower-ranked proposal gets precise feedback and
+one corrective retry. A second rejection, timeout, provider error, or missing key
+activates an explicit fallback to the first top-ranked move. Temperature zero
+reduces sampling variance, but correctness comes from this deterministic gate.
 
 Immediate wins and forced blocks are deterministic tactical guards. They avoid
-spending latency or tokens on decisions with only one rational action.
+spending model latency or tokens on decisions with only one rational action.
 
 ## Search
 
@@ -116,10 +126,13 @@ The tactical engine uses:
 - Center-first move ordering to improve pruning.
 - Immediate terminal scoring that prefers faster wins and slower losses.
 - Four-cell window scoring across horizontal, vertical, and both diagonal axes.
-- Configurable depth: easy 2, medium 4, hard 6.
+- Fixed depth 6 with selective depth-7 refinement for candidates within 12
+  points of the leading heuristic score.
 - Principal variations, category labels, node count, and duration in its result.
 
-Search is both an agent tool and the transparent reliability fallback.
+Search is the authoritative policy gate and transparent reliability fallback.
+Its interface produces a ranked move set, so a future exact solver can replace
+the fixed-depth implementation without changing orchestration semantics.
 
 ## Observability
 
@@ -164,7 +177,9 @@ not the best action for each legal move.
 Runs execute one scenario per request so progress is durable across serverless
 invocations. Duplicate case requests are idempotent, partial runs remain
 inspectable, and public creation is capped at 100 selected cases per hour to
-bound provider spend.
+bound provider spend. Every run records
+`d6-selective-d7-margin12-v1` as its policy version; legacy runs remain
+inspectable but cannot resume under a different policy.
 
 ### Automated data generation
 
@@ -182,7 +197,6 @@ npm run eval:generate -- \
 # Run the production agent on a bounded sample of generated positions.
 npm run eval:generated -- \
   --provider openai \
-  --difficulty medium \
   --limit 10
 ```
 
@@ -209,7 +223,6 @@ mixed into the exact public benchmark.
   "column": 3,
   "expectedVersion": 2,
   "idempotencyKey": "08adc0d8-8c52-48bc-ae6e-2631ff25cf26",
-  "difficulty": "medium",
   "provider": "openai"
 }
 ```
@@ -226,7 +239,7 @@ names. It never returns credentials.
 `GET /api/evals` returns the current versioned scenario set and recent durable
 runs.
 
-`POST /api/evals/runs` creates a provider/difficulty evaluation run.
+`POST /api/evals/runs` creates an evaluation run for the selected provider.
 
 `GET /api/evals/runs/:runId` reloads its progress and case results.
 
@@ -273,6 +286,7 @@ comparisons, and explicit cost budgets.
 | Invalid request/history | Reject before invoking a model |
 | Full or out-of-range column | Deterministic engine error |
 | Model proposes illegal move | Return validation feedback and retry once |
+| Model proposes legal lower-ranked move | Reject, retry once, then use top-ranked move |
 | Model timeout/provider error | Visible deterministic search fallback |
 | Missing provider key | Visible deterministic search fallback |
 | Concurrent/stale action | Atomic version check; one commit, one `409` |

@@ -52,4 +52,13 @@ describe("tactical search", () => {
     expect(result.moves.map(({ column }) => column)).not.toContain(0);
     expect(result.moves).toHaveLength(6);
   });
+
+  it("restricts root analysis to requested legal columns", () => {
+    const result = analyzeMoves(play([0]), {
+      depth: 7,
+      columns: [1, 3, 8],
+    });
+
+    expect(result.moves.map(({ column }) => column)).toEqual([3, 1]);
+  });
 });

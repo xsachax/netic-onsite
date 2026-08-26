@@ -19,9 +19,6 @@ async function main(): Promise<void> {
   const provider = z
     .enum(["openai", "anthropic"])
     .parse(readArgument(args, "--provider") ?? "openai");
-  const difficulty = z
-    .enum(["easy", "medium", "hard"])
-    .parse(readArgument(args, "--difficulty") ?? "medium");
   const limit = readInteger(args, "--limit", 10);
   const batch = simulationBatchSchema.parse(
     JSON.parse(await readFile(inputPath, "utf8")),
@@ -30,7 +27,7 @@ async function main(): Promise<void> {
   const results = [];
 
   console.log(
-    `Evaluating ${candidates.length} generated positions with ${provider}/${difficulty}`,
+    `Evaluating ${candidates.length} generated positions with ${provider}`,
   );
   console.log(
     `Baseline: approximate depth ${batch.options.baselineDepth}, ` +
@@ -43,7 +40,6 @@ async function main(): Promise<void> {
       const execution = await executeEvalScenario({
         scenario,
         provider,
-        difficulty,
       });
       results.push({
         scenarioId: scenario.id,
@@ -84,7 +80,6 @@ async function main(): Promise<void> {
         {
           source: inputPath,
           provider,
-          difficulty,
           baselineExact: false,
           passed,
           total: results.length,

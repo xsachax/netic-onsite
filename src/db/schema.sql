@@ -7,8 +7,6 @@ CREATE TABLE IF NOT EXISTS games (
   winner SMALLINT CHECK (winner IN (1, 2)),
   version SMALLINT NOT NULL DEFAULT 0
     CHECK (version BETWEEN 0 AND 42),
-  difficulty TEXT NOT NULL DEFAULT 'medium'
-    CHECK (difficulty IN ('easy', 'medium', 'hard')),
   provider TEXT NOT NULL DEFAULT 'openai'
     CHECK (provider IN ('openai', 'anthropic')),
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
@@ -62,9 +60,9 @@ CREATE INDEX IF NOT EXISTS moves_agent_analytics_idx
 CREATE TABLE IF NOT EXISTS eval_runs (
   id UUID PRIMARY KEY,
   dataset_version TEXT NOT NULL,
+  policy_version TEXT NOT NULL,
   scenario_ids TEXT[] NOT NULL,
   provider TEXT NOT NULL CHECK (provider IN ('openai', 'anthropic')),
-  difficulty TEXT NOT NULL CHECK (difficulty IN ('easy', 'medium', 'hard')),
   status TEXT NOT NULL DEFAULT 'running'
     CHECK (status IN ('running', 'completed')),
   total_cases SMALLINT NOT NULL CHECK (total_cases > 0),
@@ -102,3 +100,11 @@ CREATE INDEX IF NOT EXISTS eval_runs_created_at_idx
   ON eval_runs (created_at DESC);
 CREATE INDEX IF NOT EXISTS eval_results_score_idx
   ON eval_results (scenario_id, passed);
+
+ALTER TABLE games DROP COLUMN IF EXISTS difficulty;
+ALTER TABLE eval_runs DROP COLUMN IF EXISTS difficulty;
+ALTER TABLE eval_runs ADD COLUMN IF NOT EXISTS policy_version TEXT;
+UPDATE eval_runs
+SET policy_version = 'legacy-unversioned'
+WHERE policy_version IS NULL;
+ALTER TABLE eval_runs ALTER COLUMN policy_version SET NOT NULL;

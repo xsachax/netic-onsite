@@ -2,7 +2,6 @@ import { randomUUID } from "node:crypto";
 import { z } from "zod";
 import type {
   AgentDecision,
-  AgentDifficulty,
   AgentProvider,
 } from "@/agent";
 import type { GameState, Move } from "@/domain/connect4";
@@ -16,7 +15,6 @@ const gameRowSchema = z.object({
   current_player: z.coerce.number().int().min(1).max(2),
   winner: z.coerce.number().int().min(1).max(2).nullable(),
   version: z.coerce.number().int().min(0).max(42),
-  difficulty: z.enum(["easy", "medium", "hard"]),
   provider: z.enum(["openai", "anthropic"]),
   created_at: z.coerce.date(),
   updated_at: z.coerce.date(),
@@ -69,7 +67,6 @@ const providerAnalyticsRowSchema = z.object({
 export interface PersistentGame {
   readonly id: string;
   readonly state: GameState;
-  readonly difficulty: AgentDifficulty;
   readonly provider: AgentProvider;
   readonly latestAgentDecision: AgentDecision | null;
   readonly createdAt: string;
@@ -126,17 +123,15 @@ export class GameDataIntegrityError extends Error {
 }
 
 export async function createPersistentGame(options?: {
-  readonly difficulty?: AgentDifficulty;
   readonly provider?: AgentProvider;
 }): Promise<PersistentGame> {
   const sql = getDatabase();
   const id = randomUUID();
-  const difficulty = options?.difficulty ?? "medium";
   const provider = options?.provider ?? "openai";
 
   await sql`
-    INSERT INTO games (id, difficulty, provider)
-    VALUES (${id}, ${difficulty}, ${provider})
+    INSERT INTO games (id, provider)
+    VALUES (${id}, ${provider})
   `;
 
   return getPersistentGame(id);
@@ -155,7 +150,6 @@ export async function getPersistentGame(
           current_player,
           winner,
           version,
-          difficulty,
           provider,
           created_at,
           updated_at,
@@ -210,7 +204,6 @@ export async function getPersistentGame(
   return {
     id: gameRow.id,
     state,
-    difficulty: gameRow.difficulty,
     provider: gameRow.provider,
     latestAgentDecision,
     createdAt: gameRow.created_at.toISOString(),
@@ -222,7 +215,6 @@ export async function commitPersistentTurn(options: {
   readonly gameId: string;
   readonly expectedVersion: number;
   readonly idempotencyKey: string;
-  readonly difficulty: AgentDifficulty;
   readonly provider: AgentProvider;
   readonly resultingState: GameState;
   readonly humanMove: Move;
@@ -234,7 +226,6 @@ export async function commitPersistentTurn(options: {
     gameId,
     expectedVersion,
     idempotencyKey,
-    difficulty,
     provider,
     resultingState,
     humanMove,
@@ -261,7 +252,6 @@ export async function commitPersistentTurn(options: {
         current_player = ${resultingState.currentPlayer},
         winner = ${resultingState.winner},
         version = ${resultingState.version},
-        difficulty = ${difficulty},
         provider = ${provider},
         updated_at = NOW(),
         completed_at = ${completedAt}::timestamptz

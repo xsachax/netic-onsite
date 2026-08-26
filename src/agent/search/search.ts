@@ -41,7 +41,7 @@ export function analyzeMoves(
     rootPlayer: state.currentPlayer,
   };
   const threats = immediateWinningMoves(state, opponent(state.currentPlayer));
-  const moves = orderedLegalMoves(state).map((column): MoveAnalysis => {
+  const moves = orderedLegalMoves(state, options.columns).map((column): MoveAnalysis => {
     const nextState = applyMove(state, column);
     const opponentWinningReplies =
       nextState.status === "playing"
@@ -265,9 +265,17 @@ function immediateWinningMoves(
   );
 }
 
-function orderedLegalMoves(state: GameState): number[] {
+function orderedLegalMoves(
+  state: GameState,
+  columns?: readonly number[],
+): number[] {
   const legalMoves = new Set(getLegalMoves(state));
-  return MOVE_ORDER.filter((column) => legalMoves.has(column));
+  const requestedMoves = columns ? new Set(columns) : null;
+  return MOVE_ORDER.filter(
+    (column) =>
+      legalMoves.has(column) &&
+      (requestedMoves === null || requestedMoves.has(column)),
+  );
 }
 
 function categorizeMove(
