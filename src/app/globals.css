@@ -125,6 +125,51 @@ h1 {
   font-size: 0.98rem;
 }
 
+.analytics-bar {
+  display: grid;
+  grid-template-columns: 1.25fr repeat(5, 1fr);
+  gap: 1px;
+  overflow: hidden;
+  margin-bottom: 20px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: var(--line);
+}
+
+.analytics-title,
+.analytics-metric {
+  min-width: 0;
+  padding: 12px 14px;
+  background: rgba(12, 19, 38, 0.92);
+}
+
+.analytics-title {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.analytics-title > div,
+.analytics-metric {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.analytics-title strong,
+.analytics-metric strong {
+  font: 700 0.78rem/1.1 monospace;
+}
+
+.analytics-title small,
+.analytics-metric span {
+  overflow: hidden;
+  color: var(--muted);
+  font-size: 0.62rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .workspace {
   display: grid;
   grid-template-columns: minmax(520px, 1.35fr) minmax(330px, 0.65fr);
@@ -629,6 +674,10 @@ footer a {
 }
 
 @media (max-width: 900px) {
+  .analytics-bar {
+    grid-template-columns: repeat(3, 1fr);
+  }
+
   .workspace {
     grid-template-columns: 1fr;
   }
@@ -651,6 +700,10 @@ footer a {
 
   .status-card {
     width: 100%;
+  }
+
+  .analytics-bar {
+    grid-template-columns: repeat(2, 1fr);
   }
 
   .game-panel {

@@ -11,15 +11,20 @@ import {
 import {
   configResponseSchema,
   agentDecisionSchema,
+  analyticsResponseSchema,
+  persistentGameResponseSchema,
   turnResponseSchema,
   type AgentDecisionContract,
+  type AnalyticsResponse,
   type ConfigResponse,
+  type PersistentGameContract,
 } from "@/game/contracts";
 import { replayGame } from "@/game/history";
 
 const STORAGE_KEY = "connect-four-agent-game-v1";
 
 interface StoredGame {
+  readonly gameId: string | null;
   readonly moves: readonly number[];
   readonly provider: "openai" | "anthropic";
   readonly difficulty: "easy" | "medium" | "hard";
@@ -27,6 +32,7 @@ interface StoredGame {
 }
 
 const storedGameSchema = z.object({
+  gameId: z.string().uuid().nullable().optional().default(null),
   moves: z.array(z.number().int().min(0).max(6)).max(42),
   provider: z.enum(["openai", "anthropic"]),
   difficulty: z.enum(["easy", "medium", "hard"]),
@@ -34,6 +40,7 @@ const storedGameSchema = z.object({
 });
 
 export default function Home() {
+  const [gameId, setGameId] = useState<string | null>(null);
   const [game, setGame] = useState<GameState>(() => createGame());
   const [agentDecision, setAgentDecision] =
     useState<AgentDecisionContract | null>(null);
@@ -42,6 +49,7 @@ export default function Home() {
     "medium",
   );
   const [config, setConfig] = useState<ConfigResponse | null>(null);
+  const [analytics, setAnalytics] = useState<AnalyticsResponse | null>(null);
   const [isHydrated, setIsHydrated] = useState(false);
   const [isThinking, setIsThinking] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -55,9 +63,11 @@ export default function Home() {
       await Promise.resolve();
       if (!active) return;
 
+      const storedDifficulty = stored?.difficulty ?? "medium";
       if (stored) {
         try {
           setGame(replayGame(stored.moves));
+          setGameId(stored.gameId);
           setProvider(stored.provider);
           setDifficulty(stored.difficulty);
           setAgentDecision(stored.agentDecision);
@@ -66,7 +76,6 @@ export default function Home() {
           setError("Saved game data was invalid, so a new game was started.");
         }
       }
-      setIsHydrated(true);
 
       try {
         const nextConfig = await loadConfig();
@@ -75,9 +84,41 @@ export default function Home() {
         if (!stored) {
           setProvider(nextConfig.defaultProvider);
         }
+
+        if (nextConfig.persistence.available) {
+          let persistentGame: PersistentGameContract;
+
+          try {
+            persistentGame = stored?.gameId
+              ? await loadPersistentGame(stored.gameId)
+              : await createRemoteGame(
+                  storedDifficulty,
+                  stored?.provider ?? nextConfig.defaultProvider,
+                );
+          } catch {
+            persistentGame = await createRemoteGame(
+              storedDifficulty,
+              stored?.provider ?? nextConfig.defaultProvider,
+            );
+          }
+
+          if (!active) return;
+          applyPersistentGame(persistentGame, {
+            setGameId,
+            setGame,
+            setAgentDecision,
+            setDifficulty,
+            setProvider,
+          });
+          setAnalytics(await loadAnalytics());
+        }
       } catch {
         if (active) {
           setError("Agent configuration could not be loaded.");
+        }
+      } finally {
+        if (active) {
+          setIsHydrated(true);
         }
       }
     }
@@ -93,13 +134,14 @@ export default function Home() {
     if (!isHydrated) return;
 
     const stored: StoredGame = {
+      gameId,
       moves: game.moves.map(({ column }) => column),
       provider,
       difficulty,
       agentDecision,
     };
     localStorage.setItem(STORAGE_KEY, JSON.stringify(stored));
-  }, [agentDecision, difficulty, game, isHydrated, provider]);
+  }, [agentDecision, difficulty, game, gameId, isHydrated, provider]);
 
   const playColumn = useCallback(
     async (column: number) => {
@@ -116,25 +158,62 @@ export default function Home() {
       setError(null);
 
       try {
-        const response = await fetch("/api/turn", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            moves: game.moves.map((move) => move.column),
-            column,
-            difficulty,
-            provider,
-          }),
-        });
+        const usesPersistence =
+          Boolean(gameId) && Boolean(config?.persistence.available);
+        const response = await fetch(
+          usesPersistence ? `/api/games/${gameId}/turns` : "/api/turn",
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(
+              usesPersistence
+                ? {
+                    column,
+                    expectedVersion: game.version,
+                    idempotencyKey: crypto.randomUUID(),
+                    difficulty,
+                    provider,
+                  }
+                : {
+                    moves: game.moves.map((move) => move.column),
+                    column,
+                    difficulty,
+                    provider,
+                  },
+            ),
+          },
+        );
         const payload: unknown = await response.json();
 
         if (!response.ok) {
+          if (usesPersistence && readApiErrorCode(payload) === "VERSION_CONFLICT") {
+            const current = await loadPersistentGame(gameId!);
+            applyPersistentGame(current, {
+              setGameId,
+              setGame,
+              setAgentDecision,
+              setDifficulty,
+              setProvider,
+            });
+          }
           throw new Error(readApiError(payload));
         }
 
-        const result = turnResponseSchema.parse(payload);
-        setGame(result.state);
-        setAgentDecision(result.agentDecision);
+        if (usesPersistence) {
+          const result = persistentGameResponseSchema.parse(payload);
+          applyPersistentGame(result.game, {
+            setGameId,
+            setGame,
+            setAgentDecision,
+            setDifficulty,
+            setProvider,
+          });
+          void loadAnalytics().then(setAnalytics);
+        } else {
+          const result = turnResponseSchema.parse(payload);
+          setGame(result.state);
+          setAgentDecision(result.agentDecision);
+        }
       } catch (requestError) {
         setError(
           requestError instanceof Error
@@ -145,14 +224,39 @@ export default function Home() {
         setIsThinking(false);
       }
     },
-    [difficulty, game, isThinking, legalMoves, provider],
+    [config, difficulty, game, gameId, isThinking, legalMoves, provider],
   );
 
-  function resetGame(): void {
-    setGame(createGame());
-    setAgentDecision(null);
+  async function resetGame(): Promise<void> {
+    setIsThinking(true);
     setError(null);
-    localStorage.removeItem(STORAGE_KEY);
+
+    try {
+      if (config?.persistence.available) {
+        const nextGame = await createRemoteGame(difficulty, provider);
+        applyPersistentGame(nextGame, {
+          setGameId,
+          setGame,
+          setAgentDecision,
+          setDifficulty,
+          setProvider,
+        });
+        setAnalytics(await loadAnalytics());
+      } else {
+        setGameId(null);
+        setGame(createGame());
+        setAgentDecision(null);
+        localStorage.removeItem(STORAGE_KEY);
+      }
+    } catch (resetError) {
+      setError(
+        resetError instanceof Error
+          ? resetError.message
+          : "A new game could not be created.",
+      );
+    } finally {
+      setIsThinking(false);
+    }
   }
 
   const status = statusCopy(game, isThinking);
@@ -177,6 +281,8 @@ export default function Home() {
           </div>
         </div>
       </header>
+
+      {analytics && <AnalyticsBar analytics={analytics} />}
 
       <section className="workspace">
         <div className="game-panel">
@@ -216,7 +322,12 @@ export default function Home() {
               </div>
             </div>
 
-            <button className="reset-button" onClick={resetGame} type="button">
+            <button
+              className="reset-button"
+              disabled={isThinking}
+              onClick={() => void resetGame()}
+              type="button"
+            >
               New game
             </button>
           </div>
@@ -321,12 +432,63 @@ export default function Home() {
       </section>
 
       <footer>
-        <span>State transitions are deterministic and server-validated.</span>
+        <span>
+          {gameId
+            ? `Durable session ${gameId.slice(0, 8)} · version ${game.version}`
+            : "State transitions are deterministic and server-validated."}
+        </span>
         <a href="https://github.com/xsachax/netic-onsite">
           View architecture on GitHub
         </a>
       </footer>
     </main>
+  );
+}
+
+function AnalyticsBar({
+  analytics,
+}: {
+  readonly analytics: AnalyticsResponse;
+}) {
+  const completed = Math.max(analytics.completedGames, 1);
+  const agentWinRate = Math.round((analytics.agentWins / completed) * 100);
+
+  return (
+    <section className="analytics-bar" aria-label="Gameplay analytics">
+      <div className="analytics-title">
+        <span className="status-light" />
+        <div>
+          <strong>Live analytics</strong>
+          <small>Neon Postgres</small>
+        </div>
+      </div>
+      <AnalyticsMetric label="Games" value={analytics.totalGames.toLocaleString()} />
+      <AnalyticsMetric label="Agent win rate" value={`${agentWinRate}%`} />
+      <AnalyticsMetric
+        label="Fallback rate"
+        value={`${Math.round(analytics.fallbackRate * 100)}%`}
+      />
+      <AnalyticsMetric
+        label="Avg. latency"
+        value={`${Math.round(analytics.averageLatencyMs)} ms`}
+      />
+      <AnalyticsMetric label="Tokens" value={analytics.totalTokens.toLocaleString()} />
+    </section>
+  );
+}
+
+function AnalyticsMetric({
+  label,
+  value,
+}: {
+  readonly label: string;
+  readonly value: string;
+}) {
+  return (
+    <div className="analytics-metric">
+      <span>{label}</span>
+      <strong>{value}</strong>
+    </div>
   );
 }
 
@@ -458,6 +620,61 @@ async function loadConfig(): Promise<ConfigResponse> {
   return configResponseSchema.parse(await response.json());
 }
 
+async function createRemoteGame(
+  difficulty: "easy" | "medium" | "hard",
+  provider: "openai" | "anthropic",
+): Promise<PersistentGameContract> {
+  const response = await fetch("/api/games", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ difficulty, provider }),
+  });
+  const payload: unknown = await response.json();
+  if (!response.ok) {
+    throw new Error(readApiError(payload));
+  }
+
+  return persistentGameResponseSchema.parse(payload).game;
+}
+
+async function loadPersistentGame(
+  gameId: string,
+): Promise<PersistentGameContract> {
+  const response = await fetch(`/api/games/${gameId}`);
+  const payload: unknown = await response.json();
+  if (!response.ok) {
+    throw new Error(readApiError(payload));
+  }
+
+  return persistentGameResponseSchema.parse(payload).game;
+}
+
+async function loadAnalytics(): Promise<AnalyticsResponse> {
+  const response = await fetch("/api/analytics");
+  if (!response.ok) {
+    throw new Error("Gameplay analytics could not be loaded.");
+  }
+
+  return analyticsResponseSchema.parse(await response.json());
+}
+
+function applyPersistentGame(
+  persistentGame: PersistentGameContract,
+  setters: {
+    readonly setGameId: (value: string) => void;
+    readonly setGame: (value: GameState) => void;
+    readonly setAgentDecision: (value: AgentDecisionContract | null) => void;
+    readonly setDifficulty: (value: "easy" | "medium" | "hard") => void;
+    readonly setProvider: (value: "openai" | "anthropic") => void;
+  },
+): void {
+  setters.setGameId(persistentGame.id);
+  setters.setGame(persistentGame.state);
+  setters.setAgentDecision(persistentGame.latestAgentDecision);
+  setters.setDifficulty(persistentGame.difficulty);
+  setters.setProvider(persistentGame.provider);
+}
+
 function loadStoredGame(): StoredGame | null {
   const value = localStorage.getItem(STORAGE_KEY);
   if (!value) return null;
@@ -485,4 +702,20 @@ function readApiError(payload: unknown): string {
   }
 
   return "The turn could not be completed.";
+}
+
+function readApiErrorCode(payload: unknown): string | null {
+  if (
+    typeof payload === "object" &&
+    payload !== null &&
+    "error" in payload &&
+    typeof payload.error === "object" &&
+    payload.error !== null &&
+    "code" in payload.error &&
+    typeof payload.error.code === "string"
+  ) {
+    return payload.error.code;
+  }
+
+  return null;
 }
