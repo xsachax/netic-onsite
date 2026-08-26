@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { z } from "zod";
 import {
+  applyMove,
   createGame,
   getLegalMoves,
   type GameState,
@@ -122,7 +123,7 @@ export default function Home() {
   }, []);
 
   useEffect(() => {
-    if (!isHydrated) return;
+    if (!isHydrated || isThinking) return;
 
     const stored: StoredGame = {
       gameId,
@@ -131,7 +132,7 @@ export default function Home() {
       agentDecision,
     };
     localStorage.setItem(STORAGE_KEY, JSON.stringify(stored));
-  }, [agentDecision, game, gameId, isHydrated, provider]);
+  }, [agentDecision, game, gameId, isHydrated, isThinking, provider]);
 
   const playColumn = useCallback(
     async (column: number) => {
@@ -144,12 +145,16 @@ export default function Home() {
         return;
       }
 
+      const canonicalGame = game;
+      const optimisticGame = applyMove(canonicalGame, column);
+      const usesPersistence =
+        Boolean(gameId) && Boolean(config?.persistence.available);
+
+      setGame(optimisticGame);
       setIsThinking(true);
       setError(null);
 
       try {
-        const usesPersistence =
-          Boolean(gameId) && Boolean(config?.persistence.available);
         const response = await fetch(
           usesPersistence ? `/api/games/${gameId}/turns` : "/api/turn",
           {
@@ -159,12 +164,12 @@ export default function Home() {
               usesPersistence
                 ? {
                     column,
-                    expectedVersion: game.version,
+                    expectedVersion: canonicalGame.version,
                     idempotencyKey: crypto.randomUUID(),
                     provider,
                   }
                 : {
-                    moves: game.moves.map((move) => move.column),
+                    moves: canonicalGame.moves.map((move) => move.column),
                     column,
                     provider,
                   },
@@ -174,15 +179,6 @@ export default function Home() {
         const payload: unknown = await response.json();
 
         if (!response.ok) {
-          if (usesPersistence && readApiErrorCode(payload) === "VERSION_CONFLICT") {
-            const current = await loadPersistentGame(gameId!);
-            applyPersistentGame(current, {
-              setGameId,
-              setGame,
-              setAgentDecision,
-              setProvider,
-            });
-          }
           throw new Error(readApiError(payload));
         }
 
@@ -201,6 +197,21 @@ export default function Home() {
           setAgentDecision(result.agentDecision);
         }
       } catch (requestError) {
+        if (usesPersistence && gameId) {
+          try {
+            const current = await loadPersistentGame(gameId);
+            applyPersistentGame(current, {
+              setGameId,
+              setGame,
+              setAgentDecision,
+              setProvider,
+            });
+          } catch {
+            setGame(canonicalGame);
+          }
+        } else {
+          setGame(canonicalGame);
+        }
         setError(
           requestError instanceof Error
             ? requestError.message
@@ -552,9 +563,6 @@ function Metric({ label, value }: { readonly label: string; readonly value: stri
 }
 
 function statusCopy(game: GameState, thinking: boolean) {
-  if (thinking) {
-    return { title: "Agent thinking", detail: "Tool loop in progress" };
-  }
   if (game.status === "won") {
     return game.winner === 1
       ? { title: "You won", detail: "Four connected" }
@@ -562,6 +570,9 @@ function statusCopy(game: GameState, thinking: boolean) {
   }
   if (game.status === "draw") {
     return { title: "Draw", detail: "The board is full" };
+  }
+  if (thinking) {
+    return { title: "Agent thinking", detail: "Tool loop in progress" };
   }
 
   return { title: "Your turn", detail: "Choose any open column" };
@@ -669,20 +680,4 @@ function readApiError(payload: unknown): string {
   }
 
   return "The turn could not be completed.";
-}
-
-function readApiErrorCode(payload: unknown): string | null {
-  if (
-    typeof payload === "object" &&
-    payload !== null &&
-    "error" in payload &&
-    typeof payload.error === "object" &&
-    payload.error !== null &&
-    "code" in payload.error &&
-    typeof payload.error.code === "string"
-  ) {
-    return payload.error.code;
-  }
-
-  return null;
 }
