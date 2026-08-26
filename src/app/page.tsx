@@ -56,10 +56,15 @@ export default function Home() {
       if (!active) return;
 
       if (stored) {
-        setGame(replayGame(stored.moves));
-        setProvider(stored.provider);
-        setDifficulty(stored.difficulty);
-        setAgentDecision(stored.agentDecision);
+        try {
+          setGame(replayGame(stored.moves));
+          setProvider(stored.provider);
+          setDifficulty(stored.difficulty);
+          setAgentDecision(stored.agentDecision);
+        } catch {
+          localStorage.removeItem(STORAGE_KEY);
+          setError("Saved game data was invalid, so a new game was started.");
+        }
       }
       setIsHydrated(true);
 
