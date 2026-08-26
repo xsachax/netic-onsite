@@ -69,7 +69,7 @@ export const evalOverviewSchema = z.object({
 });
 
 export const createEvalRunRequestSchema = z.object({
-  scenarioIds: z.array(z.string()).min(1).max(12),
+  scenarioIds: z.array(z.string()).min(1).max(30),
   provider: z.enum(["openai", "anthropic"]),
   difficulty: z.enum(["easy", "medium", "hard"]),
 });

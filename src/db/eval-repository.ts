@@ -9,7 +9,7 @@ import { agentDecisionSchema } from "@/game/contracts";
 import type { EvalCaseExecution, EvalScenario } from "@/evals";
 import { getDatabase } from "./client";
 
-const MAX_PUBLIC_RUNS_PER_HOUR = 20;
+const MAX_PUBLIC_CASES_PER_HOUR = 100;
 
 const evalRunRowSchema = z.object({
   id: z.string().uuid(),
@@ -95,7 +95,7 @@ export class EvalRunNotFoundError extends Error {
 export class EvalRunLimitError extends Error {
   constructor() {
     super(
-      `The public evaluation budget is limited to ${MAX_PUBLIC_RUNS_PER_HOUR} runs per hour.`,
+      `The public evaluation budget is limited to ${MAX_PUBLIC_CASES_PER_HOUR} cases per hour.`,
     );
     this.name = "EvalRunLimitError";
   }
@@ -116,12 +116,15 @@ export async function createEvalRun(options: {
 }): Promise<StoredEvalRun> {
   const sql = getDatabase();
   const recentRows = await sql`
-    SELECT COUNT(*)::int AS count
+    SELECT COALESCE(SUM(total_cases), 0)::int AS count
     FROM eval_runs
     WHERE created_at > NOW() - INTERVAL '1 hour'
   `;
   const recentCount = countRowSchema.parse(recentRows[0]).count;
-  if (recentCount >= MAX_PUBLIC_RUNS_PER_HOUR) {
+  if (
+    recentCount + options.scenarioIds.length >
+    MAX_PUBLIC_CASES_PER_HOUR
+  ) {
     throw new EvalRunLimitError();
   }
 

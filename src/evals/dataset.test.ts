@@ -9,7 +9,7 @@ import { prepareEvalScenario } from "./evaluator";
 describe("golden evaluation dataset", () => {
   it("contains valid, unique, solver-backed scenarios", () => {
     expect(EVAL_DATASET_VERSION).toMatch(/^pons-golden-v\d+$/);
-    expect(EVAL_SCENARIOS).toHaveLength(8);
+    expect(EVAL_SCENARIOS).toHaveLength(28);
     expect(new Set(EVAL_SCENARIOS.map(({ id }) => id)).size).toBe(
       EVAL_SCENARIOS.length,
     );
