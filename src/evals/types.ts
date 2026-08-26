@@ -25,6 +25,7 @@ export interface EvalScenario {
   readonly description: string;
   readonly moveHistory: readonly number[];
   readonly goldenMoves: readonly number[];
+  readonly solverScores?: readonly number[];
   readonly source: EvalSource;
 }
 

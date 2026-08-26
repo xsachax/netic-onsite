@@ -22,6 +22,7 @@ export const evalScenarioSchema = z.object({
   description: z.string(),
   moveHistory: z.array(z.number().int().min(0).max(6)).max(41),
   goldenMoves: z.array(z.number().int().min(0).max(6)).min(1),
+  solverScores: z.array(z.number().int()).length(7).optional(),
   source: evalSourceSchema,
 });
 

@@ -25,3 +25,8 @@ export {
   type EvalRunContract,
   type EvalScenarioContract,
 } from "./contracts";
+export {
+  EVAL_DATASET_VERSION,
+  EVAL_SCENARIOS,
+  findEvalScenario,
+} from "./dataset";

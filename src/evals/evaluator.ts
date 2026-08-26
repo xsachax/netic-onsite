@@ -4,7 +4,7 @@ import {
   type AgentDifficulty,
   type AgentProvider,
 } from "@/agent";
-import { getLegalMoves } from "@/domain/connect4";
+import { COLUMNS, getLegalMoves } from "@/domain/connect4";
 import { replayGame } from "@/game/history";
 import type {
   EvalCaseExecution,
@@ -39,6 +39,15 @@ export function prepareEvalScenario(
       scenario.id,
       "the golden move set contains no moves or an illegal move",
     );
+  }
+  if (new Set(scenario.goldenMoves).size !== scenario.goldenMoves.length) {
+    throw new InvalidEvalScenarioError(
+      scenario.id,
+      "the golden move set contains duplicates",
+    );
+  }
+  if (scenario.solverScores) {
+    validateSolverScores(scenario, legalMoves);
   }
 
   return { scenario, state };
@@ -80,5 +89,56 @@ export class InvalidEvalScenarioError extends Error {
   ) {
     super(`Evaluation scenario ${scenarioId} is invalid: ${reason}.`);
     this.name = "InvalidEvalScenarioError";
+  }
+}
+
+function validateSolverScores(
+  scenario: EvalScenario,
+  legalMoves: ReadonlySet<number>,
+): void {
+  const scores = scenario.solverScores;
+  if (!scores || scores.length !== COLUMNS) {
+    throw new InvalidEvalScenarioError(
+      scenario.id,
+      `solver scores must contain exactly ${COLUMNS} columns`,
+    );
+  }
+
+  for (const [column, score] of scores.entries()) {
+    const validLegalScore =
+      legalMoves.has(column) &&
+      Number.isInteger(score) &&
+      score >= -22 &&
+      score <= 22;
+    const validIllegalScore = !legalMoves.has(column) && score === 100;
+
+    if (!validLegalScore && !validIllegalScore) {
+      throw new InvalidEvalScenarioError(
+        scenario.id,
+        `solver score for column ${column} does not match its legal state`,
+      );
+    }
+  }
+
+  const bestScore = Math.max(
+    ...[...legalMoves].map((column) => scores[column]),
+  );
+  const expectedGoldenMoves = [...legalMoves].filter(
+    (column) => scores[column] === bestScore,
+  );
+  const suppliedGoldenMoves = [...scenario.goldenMoves].sort(
+    (left, right) => left - right,
+  );
+
+  if (
+    expectedGoldenMoves.length !== suppliedGoldenMoves.length ||
+    expectedGoldenMoves.some(
+      (column, index) => column !== suppliedGoldenMoves[index],
+    )
+  ) {
+    throw new InvalidEvalScenarioError(
+      scenario.id,
+      "the golden move set does not match the solver scores",
+    );
   }
 }

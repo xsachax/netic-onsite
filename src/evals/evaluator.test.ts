@@ -55,4 +55,15 @@ describe("evaluation scenarios", () => {
       ),
     ).toThrow(/illegal move/);
   });
+
+  it("rejects golden moves that disagree with exact solver scores", () => {
+    expect(() =>
+      prepareEvalScenario(
+        scenario({
+          goldenMoves: [4],
+          solverScores: [-2, -1, 0, 1, 0, -1, -2],
+        }),
+      ),
+    ).toThrow(/does not match the solver scores/);
+  });
 });
