@@ -48,6 +48,56 @@ button {
   padding: 42px 0 24px;
 }
 
+.app-nav {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  align-items: center;
+  margin-bottom: 48px;
+}
+
+.app-nav > div {
+  display: flex;
+  gap: 4px;
+  padding: 4px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: rgba(9, 14, 29, 0.74);
+}
+
+.app-nav a {
+  color: var(--muted);
+  text-decoration: none;
+}
+
+.app-nav > div a {
+  padding: 7px 14px;
+  border-radius: 7px;
+  font-size: 0.75rem;
+  font-weight: 700;
+}
+
+.app-nav > div a.active {
+  color: white;
+  background: #25365f;
+}
+
+.brand-mark {
+  justify-self: start;
+  color: white !important;
+  font-size: 1.1rem;
+  font-weight: 900;
+  letter-spacing: -0.07em;
+}
+
+.brand-mark span {
+  color: var(--human);
+}
+
+.nav-source {
+  justify-self: end;
+  font-size: 0.7rem;
+}
+
 .hero {
   display: flex;
   align-items: flex-end;
@@ -696,6 +746,10 @@ footer a {
   .hero {
     align-items: flex-start;
     flex-direction: column;
+  }
+
+  .app-nav {
+    margin-bottom: 32px;
   }
 
   .status-card {

@@ -20,6 +20,7 @@ import {
   type PersistentGameContract,
 } from "@/game/contracts";
 import { replayGame } from "@/game/history";
+import { AppNav } from "./components/app-nav";
 
 const STORAGE_KEY = "connect-four-agent-game-v1";
 
@@ -264,6 +265,7 @@ export default function Home() {
 
   return (
     <main className="app-shell">
+      <AppNav />
       <header className="hero">
         <div>
           <p className="eyebrow">Structured environment agent</p>
