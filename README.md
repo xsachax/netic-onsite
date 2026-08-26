@@ -64,6 +64,8 @@ flowchart LR
 - PostgreSQL stores games, append-only moves, command IDs, and agent traces.
 - The API reconstructs state by replaying database moves through the engine.
 - Browser storage holds only the durable game ID and a validated local cache.
+- The client applies the human move optimistically so the yellow token renders
+  immediately, then reconciles with canonical server state or rolls back on error.
 - Every command carries `expectedVersion` and a UUID idempotency key.
 - A single SQL statement commits both human and agent moves only when the stored
   version still matches.
