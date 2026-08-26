@@ -2,11 +2,11 @@
 
 ## Goal
 
-By **2:45 PM**, deliver a polished local web application where a human can play a
-complete Connect 4 game against an LLM-powered agent. The project should
-demonstrate more than prompt engineering: deterministic environment design,
-typed agent tools, tactical search, failure handling, evaluation, and a credible
-path to production.
+By **2:45 PM**, deliver a polished web application where a human can play a
+complete Connect 4 game against an LLM-powered agent both locally and at a
+public Vercel URL. The project should demonstrate more than prompt engineering:
+deterministic environment design, typed agent tools, tactical search, failure
+handling, evaluation, and a credible path to production.
 
 The strategy is **depth over feature count**. A small, coherent system with clear
 boundaries and evidence that it works is more defensible than many unfinished
@@ -17,6 +17,7 @@ features.
 ### Must ship
 
 - A local web UI for a complete human-versus-agent game.
+- A public Vercel deployment that presenters can play independently.
 - An authoritative, deterministic Connect 4 engine.
 - Validation for turns, full columns, terminal games, wins, and draws.
 - An LLM agent that receives structured observations and returns typed actions.
@@ -59,7 +60,7 @@ Use a single TypeScript codebase:
 ```mermaid
 flowchart LR
     UI[React game UI] --> API[Game API]
-    API --> STORE[In-memory game store]
+    API --> REPLAY[State reconstructed from move history]
     API --> ENGINE[Deterministic game engine]
     API --> ORCH[Agent orchestrator]
     ORCH --> OBS[Structured observation]
@@ -78,8 +79,9 @@ flowchart LR
 1. **The engine owns truth.** Only `applyMove` can change a board.
 2. **The agent never edits state.** It can observe state, inspect legal moves,
    request analysis, and propose a column.
-3. **The API orchestrates turns.** It applies the human move, invokes the agent,
-   validates the proposed action, and applies the agent move.
+3. **The API orchestrates turns.** It reconstructs authoritative state by
+   replaying move history, applies the human move, invokes the agent, validates
+   the proposed action, and applies the agent move.
 4. **The model is untrusted input.** All output is schema-validated and checked
    against current legal moves.
 5. **Every decision is inspectable.** A turn records model/config version, tool
@@ -93,7 +95,7 @@ src/
   domain/connect4/      # board, moves, terminal-state detection
   agent/                # orchestrator, prompts, tools, provider adapter
   agent/search/         # heuristic scoring and alpha-beta minimax
-  game/                 # use cases and local GameStore
+  game/                 # stateless turn use cases and history replay
   observability/        # structured turn traces
   evals/                # tactical fixtures and match runner
 ```
@@ -171,8 +173,9 @@ blocks a loss in one, and survives simulated malformed/provider responses.
 
 ### 1:35-2:00 — Phase 3: Playable local web experience
 
-- Add create/reset game endpoints and a human-move endpoint.
-- Use an in-memory `GameStore` behind an interface so persistence can be swapped.
+- Add a stateless turn endpoint that accepts move history rather than trusting a
+  client-supplied board.
+- Persist the returned history in browser storage for refresh/reconnect.
 - Build the responsive Connect 4 board and turn/status indicators.
 - Disable illegal interactions while the agent is thinking.
 - Show the latest agent explanation and expandable decision trace.
@@ -194,11 +197,21 @@ without using the terminal or editing state.
 **Exit criterion:** there is quantitative evidence for why the chosen agent is
 better than a raw model or random policy.
 
-### 2:20-2:35 — Phase 5: Hardening and documentation
+### 2:20-2:32 — Phase 5: Deployment and hardening
 
 - Run the full test suite and a clean production build.
 - Verify a complete human win, agent win, draw fixture, reset, and provider
   failure.
+- Configure server-only model credentials in Vercel.
+- Deploy the production build and smoke-test the public URL from a clean browser
+  session.
+- Confirm two simultaneous browser sessions cannot affect each other.
+
+**Exit criterion:** the public URL supports complete independent games and no
+model credential is shipped to the browser.
+
+### 2:32-2:38 — Phase 6: Documentation
+
 - Document setup, architecture, agent loop, state ownership, failure modes,
   evaluation methodology, and tradeoffs.
 - Add a sample environment file with variable names only.
@@ -206,7 +219,7 @@ better than a raw model or random policy.
 **Exit criterion:** the repository can be cloned and demonstrated from its
 README without tribal knowledge.
 
-### 2:35-2:45 — Phase 6: Demo rehearsal and buffer
+### 2:38-2:45 — Phase 7: Demo rehearsal and buffer
 
 Demo in this order:
 
@@ -226,7 +239,8 @@ Use this window only for blocking defects. Do not add new features.
 | Illegal model action | Schema validation plus engine validation |
 | Weak tactical play | Win/block fixtures and baseline comparison |
 | LLM outage | Simulated provider failure with visible fallback |
-| Concurrent/stale action | Game version checked before applying agent action |
+| Concurrent/stale action | State replay plus expected version validation |
+| Serverless instance isolation | Stateless API with browser-owned move history |
 | Unexplainable decisions | Structured per-turn trace |
 | Prompt/model regression | Seeded evaluation suite with versioned config |
 | Difficult production migration | Engine, store, provider, and orchestrator interfaces |
@@ -296,7 +310,7 @@ retries safe.
 | Deterministic engine owns state | LLMs are nondeterministic and cannot enforce rules | More orchestration code |
 | Hybrid LLM plus search | Demonstrates real agent/tool design and reliable tactics | Search adds CPU cost |
 | One TypeScript application | Fast local delivery and shared end-to-end types | Later services may use different runtimes |
-| In-memory store behind an interface | Meets local scope without coupling logic to persistence | State resets on restart |
+| Stateless history replay for demo | Works locally and across Vercel instances without shared memory | Durable cross-device resume waits for a database |
 | Typed tools and schemas | Constrains model behavior and makes failures testable | Schema/prompt versions must be managed |
 | Explicit fallback | A complete game survives provider failure transparently | Fallback behavior must be evaluated too |
 | Append-only move history | Enables replay, audit, debugging, and evaluation | Requires snapshots/indexing at scale |
@@ -307,6 +321,7 @@ retries safe.
 The project is ready for the on-site when:
 
 - A fresh clone starts locally from documented commands.
+- A public Vercel URL can be played without repository access.
 - A human can complete a game against the agent.
 - Every board transition passes through deterministic validation.
 - Agent output is typed, bounded, and observable.
