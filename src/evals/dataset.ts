@@ -213,10 +213,10 @@ const solvedPositions: readonly SolvedPosition[] = [
     origin: "Pascal Pons Test_L3_R1 benchmark",
   },
   {
-    id: "endgame-draw-defense",
-    name: "Endgame draw defense",
+    id: "endgame-survival",
+    name: "Endgame survival",
     category: "endgame",
-    description: "Select any move tied for the best defensive outcome.",
+    description: "Select any move tied for the longest defensive outcome.",
     sequence: "12156756715535615116237724723",
     scores: [100, -2, -2, -6, 100, -2, -2],
     origin: "Pascal Pons Test_L3_R1 benchmark",

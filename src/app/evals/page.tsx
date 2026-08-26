@@ -172,6 +172,35 @@ export default function EvaluationsPage() {
         </button>
       </section>
 
+      <section className="eval-pipeline">
+        <div className="pipeline-intro">
+          <p className="eyebrow">Automated data flywheel</p>
+          <h2>Generate broadly. Promote carefully.</h2>
+          <p>
+            Seeded policy games create diverse candidate positions without
+            waiting for human traffic. Generated labels remain separate from
+            exact solver-backed golden cases.
+          </p>
+        </div>
+        <div className="pipeline-steps">
+          <div>
+            <span>01</span>
+            <strong>Simulate</strong>
+            <small>Random, heuristic, and search policies play full games.</small>
+          </div>
+          <div>
+            <span>02</span>
+            <strong>Mine</strong>
+            <small>Mirror-deduplicate and balance opening, middle, and endgame.</small>
+          </div>
+          <div>
+            <span>03</span>
+            <strong>Promote</strong>
+            <small>Exact-solve useful failures before adding a golden case.</small>
+          </div>
+        </div>
+      </section>
+
       {activeRun && <RunSummary run={activeRun} />}
       {error && <div className="error-banner">{error}</div>}
 

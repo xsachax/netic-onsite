@@ -142,12 +142,13 @@ usage. The UI shows live totals without exposing individual users or prompts.
 
 ## Evaluation platform
 
-The public **Evaluations** tab runs either provider against eight versioned board
+The public **Evaluations** tab runs either provider against 28 versioned board
 positions. Each case compares the selected column with one or more accepted
 golden moves and preserves the decision trace, explanation, latency, model, and
 token usage in PostgreSQL.
 
-The `pons-golden-v1` dataset samples opening, midgame, and endgame positions from
+The `pons-golden-v2` dataset samples wins, mandatory blocks, tactics, strategy,
+and endgames from
 Pascal Pons' public
 [GameSolver benchmarks](http://blog.gamesolver.org/solving-connect-four/02-test-protocol/).
 Per-column exact minimax scores were captured once from the public solver API and
@@ -162,8 +163,38 @@ not the best action for each legal move.
 
 Runs execute one scenario per request so progress is durable across serverless
 invocations. Duplicate case requests are idempotent, partial runs remain
-inspectable, and public creation is capped at 20 runs per hour to bound provider
-spend.
+inspectable, and public creation is capped at 100 selected cases per hour to
+bound provider spend.
+
+### Automated data generation
+
+The fixed suite is complemented by a seeded, deterministic arena:
+
+```bash
+# Play 500 complete games and export 50 diverse candidate positions.
+npm run eval:generate -- \
+  --games 500 \
+  --player-one random \
+  --player-two search \
+  --candidates 50 \
+  --baseline-depth 7
+
+# Run the production agent on a bounded sample of generated positions.
+npm run eval:generated -- \
+  --provider openai \
+  --difficulty medium \
+  --limit 10
+```
+
+The arena plays full games without model calls, captures agent-to-move
+positions, removes duplicate and mirrored boards, and samples across opening,
+midgame, and endgame stages. It labels candidates with the deeper local
+alpha-beta baseline and records that the labels are **approximate**, not exact.
+The same seed and options produce the same games and output.
+
+Generated positions are discovery data. High-value failures can be exact-solved
+offline and promoted into a new golden dataset version; they are never silently
+mixed into the exact public benchmark.
 
 ## API
 
@@ -208,8 +239,10 @@ The original stateless `POST /api/turn` remains as a local fallback when
 ## Verification
 
 ```bash
-npm test       # deterministic engine, search, orchestration, history
+npm test       # engine, search, orchestration, golden data, simulations
 npm run eval   # tactical fixtures and seeded baseline matches
+npm run eval:generate
+npm run eval:generated -- --provider openai --limit 10
 npm run db:migrate
 npm run lint
 npm run build
@@ -260,7 +293,7 @@ src/
     page.tsx            # playable UI and trace inspector
   db/                   # Neon schema, game/eval repositories, CAS commits
   domain/connect4/      # authoritative rules and state transitions
-  evals/                # golden dataset, evaluator, contracts, seeded CLI
+  evals/                # golden dataset, evaluator, automated arena, CLIs
   game/                 # history replay and shared API contracts
 ```
 

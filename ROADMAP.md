@@ -299,6 +299,8 @@ retries safe.
 - Keep deterministic tactical fixtures as a blocking CI gate.
 - Run versioned golden-move scenarios from solved public benchmark positions.
 - Persist provider, model, trace, latency, tokens, and pass/fail for every case.
+- Generate diverse candidate positions through seeded automated policy games.
+- Keep bounded-search candidate labels separate until exact solver promotion.
 - Run seeded tournaments against random, heuristic, and previous production
   agents.
 - Replay anonymized production positions against candidate versions.
