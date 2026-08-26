@@ -3,6 +3,8 @@
 A production-minded Connect Four environment where a human plays against a
 hybrid LLM and alpha-beta search agent.
 
+**Live demo:** https://netic-onsite.vercel.app
+
 This is intentionally not an LLM wrapper. The model cannot edit the board. A
 deterministic engine owns all state transitions, the model operates through
 typed tools, every proposed action is validated, and each turn produces an
