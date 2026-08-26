@@ -373,6 +373,27 @@ export async function commitPersistentTurn(options: {
   );
 }
 
+export async function getPersistentCommandResult(
+  gameId: string,
+  idempotencyKey: string,
+): Promise<PersistentGame | null> {
+  const sql = getDatabase();
+  const rows = await sql`
+    SELECT resulting_version
+    FROM game_commands
+    WHERE
+      game_id = ${gameId}::uuid
+      AND idempotency_key = ${idempotencyKey}::uuid
+  `;
+
+  if (rows.length === 0) {
+    return null;
+  }
+
+  commandRowSchema.parse(rows[0]);
+  return getPersistentGame(gameId);
+}
+
 export async function getGameAnalytics(): Promise<GameAnalytics> {
   const sql = getDatabase();
   const [overallRows, providerRows] = await sql.transaction(

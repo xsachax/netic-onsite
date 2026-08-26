@@ -78,6 +78,59 @@ export const turnResponseSchema = z.object({
   agentDecision: agentDecisionSchema.nullable(),
 });
 
+export const createGameRequestSchema = z.object({
+  difficulty: z.enum(["easy", "medium", "hard"]).default("medium"),
+  provider: z.enum(["openai", "anthropic"]).default("openai"),
+});
+
+export const persistentTurnRequestSchema = z.object({
+  column: z.number().int().min(0).max(6),
+  expectedVersion: z.number().int().min(0).max(41),
+  idempotencyKey: z.string().uuid(),
+  difficulty: z.enum(["easy", "medium", "hard"]).default("medium"),
+  provider: z.enum(["openai", "anthropic"]).default("openai"),
+});
+
+export const persistentGameSchema = z.object({
+  id: z.string().uuid(),
+  state: gameStateSchema,
+  difficulty: z.enum(["easy", "medium", "hard"]),
+  provider: z.enum(["openai", "anthropic"]),
+  latestAgentDecision: agentDecisionSchema.nullable(),
+  createdAt: z.string(),
+  updatedAt: z.string(),
+});
+
+export const persistentGameResponseSchema = z.object({
+  game: persistentGameSchema,
+  duplicate: z.boolean().optional(),
+});
+
+const analyticsProviderSchema = z.object({
+  provider: z.string(),
+  model: z.string(),
+  moves: z.number().int().nonnegative(),
+  totalTokens: z.number().nonnegative(),
+  averageLatencyMs: z.number().nonnegative(),
+});
+
+export const analyticsResponseSchema = z.object({
+  totalGames: z.number().int().nonnegative(),
+  activeGames: z.number().int().nonnegative(),
+  completedGames: z.number().int().nonnegative(),
+  humanWins: z.number().int().nonnegative(),
+  agentWins: z.number().int().nonnegative(),
+  draws: z.number().int().nonnegative(),
+  agentMoves: z.number().int().nonnegative(),
+  llmMoves: z.number().int().nonnegative(),
+  tacticalMoves: z.number().int().nonnegative(),
+  fallbackMoves: z.number().int().nonnegative(),
+  fallbackRate: z.number().min(0).max(1),
+  totalTokens: z.number().nonnegative(),
+  averageLatencyMs: z.number().nonnegative(),
+  providers: z.array(analyticsProviderSchema),
+});
+
 const providerSchema = z.object({
   available: z.boolean(),
   model: z.string(),
@@ -89,6 +142,9 @@ export const configResponseSchema = z.object({
     anthropic: providerSchema,
   }),
   defaultProvider: z.enum(["openai", "anthropic"]),
+  persistence: z.object({
+    available: z.boolean(),
+  }),
 });
 
 export type GameStateContract = z.infer<typeof gameStateSchema>;
@@ -96,3 +152,5 @@ export type AgentDecisionContract = z.infer<typeof agentDecisionSchema>;
 export type TurnRequest = z.infer<typeof turnRequestSchema>;
 export type TurnResponse = z.infer<typeof turnResponseSchema>;
 export type ConfigResponse = z.infer<typeof configResponseSchema>;
+export type PersistentGameContract = z.infer<typeof persistentGameSchema>;
+export type AnalyticsResponse = z.infer<typeof analyticsResponseSchema>;

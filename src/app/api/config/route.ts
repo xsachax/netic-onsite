@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { isDatabaseConfigured } from "@/db";
 
 export const runtime = "nodejs";
 
@@ -18,5 +19,8 @@ export function GET(): NextResponse {
       },
     },
     defaultProvider,
+    persistence: {
+      available: isDatabaseConfigured(),
+    },
   });
 }

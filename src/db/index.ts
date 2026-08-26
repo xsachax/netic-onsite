@@ -10,6 +10,7 @@ export {
   type GameAnalytics,
   GameVersionConflictError,
   getGameAnalytics,
+  getPersistentCommandResult,
   getPersistentGame,
   type PersistentGame,
   PersistentGameNotFoundError,
